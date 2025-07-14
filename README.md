@@ -337,24 +337,6 @@ function verifyDocument(bytes32 _documentHash) returns (bool)
    - Check current gas prices on [PolygonScan](https://polygonscan.com/gastracker)
    - Adjust gas settings in MetaMask if needed
 
-## 🤝 Contributing
-
-We welcome contributions! Here's how to get started:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Make your changes
-4. Run tests (`npm test`)
-5. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-6. Push to the branch (`git push origin feature/AmazingFeature`)
-7. Open a Pull Request
-
-### Development Guidelines:
-- Follow the existing code style
-- Add tests for new features
-- Update documentation as needed
-- Ensure all tests pass before submitting PR
-
 ## 📄 Smart Contract Details
 
 ### DocumentRegistry.sol
