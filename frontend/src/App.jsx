@@ -1,4 +1,4 @@
-import React, { useState, createContext } from 'react';
+import React, { useState, createContext, useCallback } from 'react';
 import FileUpload from './components/FileUpload';
 import EncryptionModule from './components/EncryptionModule';
 import KeyManagement from './components/KeyManagement';
@@ -14,28 +14,34 @@ function App() {
   const [encryptedData, setEncryptedData] = useState(null);
   const [notifications, setNotifications] = useState([]);
 
-  const addNotification = (message, type = 'info') => {
+  const addNotification = useCallback((message, type = 'info') => {
     const id = Date.now();
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 5000);
-  };
+  }, []);
 
-  const handleFileSelect = (file) => {
+  const handleFileSelect = useCallback((file) => {
     setSelectedFile(file);
     setEncryptedData(null);
-  };
+  }, []);
 
-  const handleKeyGenerated = (key) => {
-    setEncryptionKey(key);
-    addNotification('Encryption key generated successfully', 'success');
-  };
+  const handleKeyGenerated = useCallback((key) => {
+    // Only update if key actually changed
+    if (key !== encryptionKey) {
+      setEncryptionKey(key);
+      // Only show notification for new key generation, not loading from storage
+      if (key && !encryptionKey) {
+        addNotification('Encryption key loaded', 'success');
+      }
+    }
+  }, [encryptionKey, addNotification]);
 
-  const handleEncrypted = (result) => {
+  const handleEncrypted = useCallback((result) => {
     setEncryptedData(result);
     addNotification('File encrypted successfully', 'success');
-  };
+  }, [addNotification]);
 
   return (
     <AppContext.Provider value={{ addNotification }}>

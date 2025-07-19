@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { 
   Key, 
   Eye, 
@@ -11,6 +11,7 @@ import {
   RefreshCw 
 } from 'lucide-react';
 import CryptoUtils from '../../utils/crypto';
+import { AppContext } from '../../App';
 import './KeyManagement.css';
 
 function KeyManagement({ onKeyGenerated }) {
@@ -20,10 +21,15 @@ function KeyManagement({ onKeyGenerated }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [importError, setImportError] = useState('');
+  const { addNotification } = useContext(AppContext);
+  const hasLoadedKey = useRef(false);
 
   useEffect(() => {
     // Load existing key from IndexedDB on component mount
-    loadStoredKey();
+    if (!hasLoadedKey.current) {
+      hasLoadedKey.current = true;
+      loadStoredKey();
+    }
   }, []);
 
   useEffect(() => {
@@ -68,9 +74,12 @@ function KeyManagement({ onKeyGenerated }) {
       const keyId = `key_${Date.now()}`;
       await CryptoUtils.storeKeyInDB(keyId, key);
       
+      addNotification('Encryption key generated successfully', 'success');
+      
     } catch (error) {
       console.error('Key generation error:', error);
       setImportError('Failed to generate key');
+      addNotification('Failed to generate key', 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -114,9 +123,12 @@ function KeyManagement({ onKeyGenerated }) {
       // Reset file input
       event.target.value = '';
       
+      addNotification('Key imported successfully', 'success');
+      
     } catch (error) {
       console.error('Key import error:', error);
       setImportError(error.message);
+      addNotification('Failed to import key: ' + error.message, 'error');
     }
   };
 

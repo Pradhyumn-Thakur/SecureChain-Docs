@@ -168,6 +168,11 @@ class CryptoUtils {
    */
   static async encryptFile(file, key, onProgress = () => {}) {
     try {
+      // Validate file
+      if (!file || file.size === 0) {
+        throw new Error('Invalid file: File is empty or corrupted');
+      }
+
       const chunkSize = 1024 * 1024; // 1MB chunks for better memory management
       const totalChunks = Math.ceil(file.size / chunkSize);
       const encryptedChunks = [];
@@ -206,11 +211,10 @@ class CryptoUtils {
   }
 
   /**
-   * Store key securely in IndexedDB
-   * @param {string} keyId - Identifier for the key
-   * @param {CryptoKey} key - The key to store
+   * Initialize IndexedDB
+   * @returns {Promise<IDBDatabase>}
    */
-  static async storeKeyInDB(keyId, key) {
+  static async initDB() {
     const dbName = 'DocumentStorageDB';
     const storeName = 'encryptionKeys';
     
@@ -221,21 +225,44 @@ class CryptoUtils {
       
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        // Create object store if it doesn't exist
         if (!db.objectStoreNames.contains(storeName)) {
           db.createObjectStore(storeName);
         }
       };
       
       request.onsuccess = (event) => {
-        const db = event.target.result;
-        const transaction = db.transaction([storeName], 'readwrite');
-        const store = transaction.objectStore(storeName);
-        
-        const storeRequest = store.put(key, keyId);
-        storeRequest.onsuccess = () => resolve();
-        storeRequest.onerror = () => reject(new Error('Failed to store key'));
+        resolve(event.target.result);
       };
     });
+  }
+
+  /**
+   * Store key securely in IndexedDB
+   * @param {string} keyId - Identifier for the key
+   * @param {CryptoKey} key - The key to store
+   */
+  static async storeKeyInDB(keyId, key) {
+    try {
+      const db = await this.initDB();
+      const transaction = db.transaction(['encryptionKeys'], 'readwrite');
+      const store = transaction.objectStore('encryptionKeys');
+      
+      return new Promise((resolve, reject) => {
+        const request = store.put(key, keyId);
+        request.onsuccess = () => {
+          db.close();
+          resolve();
+        };
+        request.onerror = () => {
+          db.close();
+          reject(new Error('Failed to store key'));
+        };
+      });
+    } catch (error) {
+      console.error('Store key error:', error);
+      throw error;
+    }
   }
 
   /**
@@ -244,30 +271,30 @@ class CryptoUtils {
    * @returns {Promise<CryptoKey>} The retrieved key
    */
   static async getKeyFromDB(keyId) {
-    const dbName = 'DocumentStorageDB';
-    const storeName = 'encryptionKeys';
-    
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 1);
+    try {
+      const db = await this.initDB();
+      const transaction = db.transaction(['encryptionKeys'], 'readonly');
+      const store = transaction.objectStore('encryptionKeys');
       
-      request.onerror = () => reject(new Error('Failed to open database'));
-      
-      request.onsuccess = (event) => {
-        const db = event.target.result;
-        const transaction = db.transaction([storeName], 'readonly');
-        const store = transaction.objectStore(storeName);
-        
-        const getRequest = store.get(keyId);
-        getRequest.onsuccess = () => {
-          if (getRequest.result) {
-            resolve(getRequest.result);
+      return new Promise((resolve, reject) => {
+        const request = store.get(keyId);
+        request.onsuccess = () => {
+          db.close();
+          if (request.result) {
+            resolve(request.result);
           } else {
             reject(new Error('Key not found'));
           }
         };
-        getRequest.onerror = () => reject(new Error('Failed to retrieve key'));
-      };
-    });
+        request.onerror = () => {
+          db.close();
+          reject(new Error('Failed to retrieve key'));
+        };
+      });
+    } catch (error) {
+      console.error('Get key error:', error);
+      throw error;
+    }
   }
 }
 
