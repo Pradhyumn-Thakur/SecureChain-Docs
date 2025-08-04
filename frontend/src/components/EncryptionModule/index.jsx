@@ -1,13 +1,16 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Loader2, Lock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Lock, CheckCircle, AlertCircle, Copy, Check } from 'lucide-react';
 import { useEncryption } from '../../hooks/useEncryption';
+import { AppContext } from '../../App';
 import './EncryptionModule.css';
 
 function EncryptionModule({ file, onEncrypted, encryptionKey }) {
   const { encryptFile, isEncrypting, encryptionProgress, error } = useEncryption();
+  const { addNotification } = useContext(AppContext);
   const [encryptionStatus, setEncryptionStatus] = useState('idle');
   const [fileHash, setFileHash] = useState(null);
   const [encryptionResult, setEncryptionResult] = useState(null);
+  const [hashCopied, setHashCopied] = useState(false);
 
   useEffect(() => {
     // Reset when file changes
@@ -15,8 +18,34 @@ function EncryptionModule({ file, onEncrypted, encryptionKey }) {
       setEncryptionStatus('idle');
       setFileHash(null);
       setEncryptionResult(null);
+      setHashCopied(false);
     }
   }, [file]);
+
+  const copyHashToClipboard = async () => {
+    if (!fileHash) return;
+    
+    try {
+      await navigator.clipboard.writeText(fileHash);
+      setHashCopied(true);
+      addNotification('Original file hash copied to clipboard!', 'success');
+      
+      // Reset the copied state after 2 seconds
+      setTimeout(() => setHashCopied(false), 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = fileHash;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      setHashCopied(true);
+      addNotification('Original file hash copied to clipboard!', 'success');
+      setTimeout(() => setHashCopied(false), 2000);
+    }
+  };
 
   const handleEncrypt = async () => {
     if (!file || !encryptionKey) {
@@ -101,8 +130,21 @@ function EncryptionModule({ file, onEncrypted, encryptionKey }) {
 
           {fileHash && (
             <div className="hash-display">
-              <h4>Original File Hash:</h4>
-              <code>{fileHash}</code>
+              <h4>Original File Hash (save for retrieval):</h4>
+              <div className="hash-container">
+                <code className="hash-value">{fileHash}</code>
+                <button
+                  onClick={copyHashToClipboard}
+                  className={`copy-button ${hashCopied ? 'copied' : ''}`}
+                  title="Copy hash to clipboard"
+                >
+                  {hashCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+              <small className="hash-note">
+                💡 <strong>Important:</strong> Save this hash securely! You'll need it to retrieve your document later. 
+                Click the copy button to copy it to your clipboard.
+              </small>
             </div>
           )}
 

@@ -37,24 +37,32 @@ contract DocumentRegistry {
         address indexed revokedFrom
     );
     
-    // Store a new document
+    // Store a new document or update existing one (for privacy-focused user-scoped hashes)
     function storeDocument(
         bytes32 _documentHash,
         string memory _ipfsCID,
         string memory _fileName
     ) public {
-        require(documents[_documentHash].timestamp == 0, "Document already exists");
         require(bytes(_ipfsCID).length > 0, "IPFS CID required");
         require(bytes(_fileName).length > 0, "File name required");
         
-        Document storage newDoc = documents[_documentHash];
-        newDoc.ipfsCID = _ipfsCID;
-        newDoc.owner = msg.sender;
-        newDoc.timestamp = block.timestamp;
-        newDoc.fileName = _fileName;
-        newDoc.authorizedUsers[msg.sender] = true;
+        Document storage doc = documents[_documentHash];
+        bool isNewDocument = doc.timestamp == 0;
         
-        userDocuments[msg.sender].push(_documentHash);
+        if (isNewDocument) {
+            // New document
+            doc.owner = msg.sender;
+            doc.authorizedUsers[msg.sender] = true;
+            userDocuments[msg.sender].push(_documentHash);
+        } else {
+            // Existing document - only owner can update
+            require(doc.owner == msg.sender, "Only owner can update document");
+        }
+        
+        // Update document data (works for both new and existing)
+        doc.ipfsCID = _ipfsCID;
+        doc.timestamp = block.timestamp;
+        doc.fileName = _fileName;
         
         emit DocumentStored(_documentHash, msg.sender, _ipfsCID, block.timestamp);
     }

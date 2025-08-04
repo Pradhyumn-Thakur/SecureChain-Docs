@@ -27,7 +27,7 @@ export const useEncryption = () => {
 
       setIsEncrypting(false);
       return {
-        encryptedBlob,
+        encryptedData: encryptedBlob,  // Changed from encryptedBlob to encryptedData
         originalHash: fileHash,
         fileName: file.name,
         fileSize: file.size,
@@ -60,10 +60,36 @@ export const useEncryption = () => {
     }
   }, []);
 
+  const decryptFile = useCallback(async (encryptedData, key) => {
+    try {
+      // Convert base64 data back to buffer if needed
+      let dataBuffer;
+      if (typeof encryptedData.encryptedData === 'string') {
+        // Base64 string from IPFS
+        dataBuffer = Uint8Array.from(atob(encryptedData.encryptedData), c => c.charCodeAt(0));
+      } else {
+        dataBuffer = encryptedData.encryptedData;
+      }
+
+      // Decrypt the data
+      const decryptedBuffer = await CryptoUtils.decrypt(dataBuffer.buffer, key);
+      
+      return {
+        decryptedData: new Uint8Array(decryptedBuffer),
+        fileName: encryptedData.fileName,
+        originalHash: encryptedData.originalHash
+      };
+    } catch (err) {
+      setError(err.message);
+      throw new Error('Failed to decrypt file: ' + err.message);
+    }
+  }, []);
+
   return {
     encryptFile,
     generateKey,
     calculateFileHash,
+    decryptFile,
     isEncrypting,
     encryptionProgress,
     error

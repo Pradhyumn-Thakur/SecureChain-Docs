@@ -61,26 +61,47 @@
 }
 
 .generate-button {
-  background: #10b981;
-  color: white;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  color: #0f172a;
+  border: 3px solid #0f172a;
+  font-weight: 800;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .generate-button:hover:not(:disabled) {
-  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+  border-color: #020617;
 }
 
 .generate-button:disabled {
-  background: #9ca3af;
+  background: linear-gradient(135deg, #e5e7eb, #d1d5db);
+  color: #9ca3af;
+  border-color: #d1d5db;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 8px rgba(156, 163, 175, 0.3);
+  opacity: 0.7;
 }
 
 .import-button {
-  background: #3b82f6;
-  color: white;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  color: #0f172a;
+  border: 3px solid #0f172a;
+  font-weight: 800;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .import-button:hover {
-  background: #2563eb;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+  border-color: #020617;
 }
 
 .key-container {

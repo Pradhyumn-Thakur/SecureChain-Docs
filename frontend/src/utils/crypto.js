@@ -33,9 +33,8 @@ class CryptoUtils {
   static async exportKey(key) {
     try {
       const exported = await crypto.subtle.exportKey('raw', key);
-      const hexKey = Array.from(new Uint8Array(exported))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+      const keyArray = Array.from(new Uint8Array(exported));
+      const hexKey = keyArray.map(b => b.toString(16).padStart(2, '0')).join('');
       return hexKey;
     } catch (error) {
       console.error('Key export failed:', error);
@@ -44,34 +43,86 @@ class CryptoUtils {
   }
 
   /**
-   * Import a key from hex string
-   * @param {string} hexKey - Hex string representation of the key
+   * Import a key from hex string or JWK format (backward compatible)
+   * @param {string} keyString - Hex string or JWK JSON string representation of the key
    * @returns {Promise<CryptoKey>} The imported CryptoKey
    */
-  static async importKey(hexKey) {
+  static async importKey(keyString) {
     try {
-      // Remove any whitespace and validate hex string
-      hexKey = hexKey.trim();
-      if (!/^[0-9a-fA-F]{64}$/.test(hexKey)) {
-        throw new Error('Invalid key format. Expected 64 hex characters.');
+      const trimmedKey = keyString.trim();
+      
+      // Try to detect if this is a JWK format (starts with { and contains "kty")
+      if (trimmedKey.startsWith('{') && trimmedKey.includes('"kty"')) {
+        // This looks like a JWK format - use legacy import
+        console.log('Detected JWK format key, importing as JWK');
+        return await this.importKeyJWK(trimmedKey);
+      } else {
+        // This should be hex format
+        console.log('Detected hex format key, importing as hex');
+        return await this.importKeyHex(trimmedKey);
       }
-      
-      const keyData = new Uint8Array(
-        hexKey.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
-      );
-      
-      const key = await crypto.subtle.importKey(
-        'raw',
-        keyData,
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-      );
-      return key;
     } catch (error) {
       console.error('Key import failed:', error);
       throw new Error('Failed to import key: ' + error.message);
     }
+  }
+
+  /**
+   * Import a key from hex string
+   * @param {string} hexString - Hex string representation of the key
+   * @returns {Promise<CryptoKey>} The imported CryptoKey
+   */
+  static async importKeyHex(hexString) {
+    const cleanHex = hexString.replace(/^0x/, ''); // Remove 0x prefix if present
+    
+    // Validate hex string
+    if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
+      throw new Error('Invalid hex format. Key should contain only hexadecimal characters (0-9, a-f, A-F).');
+    }
+    
+    if (cleanHex.length !== 64) {
+      throw new Error('Invalid key length. Expected 64 hex characters (32 bytes) for AES-256.');
+    }
+    
+    // Convert hex to ArrayBuffer
+    const keyBytes = new Uint8Array(cleanHex.match(/.{2}/g).map(byte => parseInt(byte, 16)));
+    
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+    return key;
+  }
+
+  /**
+   * Import a key from JWK format (legacy support)
+   * @param {string} jwkString - JSON string representation of the key (JWK format)
+   * @returns {Promise<CryptoKey>} The imported CryptoKey
+   */
+  static async importKeyJWK(jwkString) {
+    // Parse the JSON string to get JWK object
+    const jwkKey = JSON.parse(jwkString);
+    
+    // Validate that it's a proper JWK for AES-GCM
+    if (!jwkKey.kty || jwkKey.kty !== 'oct') {
+      throw new Error('Invalid JWK format. Expected symmetric key (oct).');
+    }
+    
+    if (!jwkKey.k) {
+      throw new Error('Invalid JWK format. Missing key data.');
+    }
+    
+    const key = await crypto.subtle.importKey(
+      'jwk',
+      jwkKey,
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+    return key;
   }
 
   /**

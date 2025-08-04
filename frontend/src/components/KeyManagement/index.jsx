@@ -135,7 +135,7 @@ function KeyManagement({ onKeyGenerated }) {
   return (
     <div className="key-management">
       <div className="key-header">
-        <h3>Encryption Key Management</h3>
+        <h3>Encryption Key</h3>
         <Key className="h-5 w-5 text-gray-400" />
       </div>
 

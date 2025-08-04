@@ -179,19 +179,25 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 500;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  color: #0f172a;
+  border: 3px solid #0f172a;
+  border-radius: 8px;
+  font-weight: 800;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.875rem;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .change-file-button:hover {
-  background: #2563eb;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+  border-color: #020617;
 }
 
 /* Error Message */
@@ -205,6 +211,38 @@
   color: #991b1b;
   border-radius: 6px;
   font-size: 0.875rem;
+}
+
+.select-different {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  color: #0f172a;
+  border: 3px solid #0f172a;
+  border-radius: 8px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.875rem;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 1rem auto 0 auto;
+  width: fit-content;
+}
+
+.select-different:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+  border-color: #020617;
+}
+
+.select-different:active {
+  transform: translateY(-1px);
 }
 
 /* Responsive Design */
