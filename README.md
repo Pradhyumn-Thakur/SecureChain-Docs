@@ -461,7 +461,7 @@ npx hardhat run scripts/deploy.js --network polygonAmoy
 
 # 4. Start all services (3 terminals)
 # Terminal 1: Backend
-cd backend && npm run dev
+cd backend && npm start
 
 # Terminal 2: Frontend  
 cd frontend && npm run dev
@@ -517,15 +517,6 @@ We welcome contributions! Please follow these steps:
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## 📞 **Support**
-
-If you encounter any issues or have questions:
-
-1. Check the [Troubleshooting](#-troubleshooting) section
-2. Search existing issues in the repository
-3. Create a new issue with detailed information
-4. Join our community discussions
 
 ## 📜 **License**
 
