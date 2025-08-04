@@ -518,10 +518,6 @@ We welcome contributions! Please follow these steps:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📜 **License**
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
 ---
 
 **⚡ Ready to secure your documents on the blockchain? Get started now!**
