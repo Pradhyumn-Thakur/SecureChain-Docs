@@ -373,7 +373,7 @@ npx hardhat verify --network polygonAmoy <CONTRACT_ADDRESS>
    
    # Restart backend
    cd backend
-   npm run dev
+   npm start
    ```
 
 2. **IPFS upload failures**
