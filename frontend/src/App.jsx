@@ -235,7 +235,7 @@ function AppContent() {
 
   return (
     <AppContext.Provider value={{ addNotification, removeNotification }}>
-      <div className="min-h-screen bg-surface-950 relative">
+      <div className="h-screen bg-surface-950 relative overflow-hidden overscroll-none">
         {/* Noise texture overlay */}
         <div className="noise-overlay" />
 
@@ -259,9 +259,9 @@ function AppContent() {
         />
 
         {/* Main content */}
-        <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        <div className={`h-screen flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
           {/* Top bar with animated gradient bottom border */}
-          <header className="sticky top-0 z-30 h-16 flex items-center justify-between px-4 md:px-8 bg-surface-950/80 backdrop-blur-xl border-b border-white/[0.04] relative">
+          <header className="shrink-0 z-30 h-16 flex items-center justify-between px-4 md:px-8 bg-surface-950/80 backdrop-blur-xl border-b border-white/[0.04] relative">
             {/* Animated gradient bottom border */}
             <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-accent-500/30 to-transparent animate-gradient-shift" style={{ backgroundSize: '200% 100%' }} />
 
@@ -292,7 +292,7 @@ function AppContent() {
           </header>
 
           {/* Page content */}
-          <main className="p-4 md:p-8 max-w-7xl relative z-10">
+          <main className="p-4 md:px-8 md:py-6 max-w-7xl relative z-10 flex-1 overflow-y-auto overflow-x-hidden flex flex-col w-full">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -301,6 +301,7 @@ function AppContent() {
                 animate="animate"
                 exit="exit"
                 transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="flex-1 flex flex-col"
               >
                 {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} />}
                 {activeTab === 'upload' && (

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Wallet, LogOut, AlertCircle, ChevronDown } from 'lucide-react';
+import { LogOut, AlertCircle, ChevronDown, Link } from 'lucide-react';
 import { useWeb3 } from '../../contexts/Web3Context';
 
 const isValidAddress = (address) => /^0x[a-fA-F0-9]{40}$/.test(address);
@@ -23,10 +23,6 @@ const WalletConnect = () => {
       setShowManualInput(false);
     } catch (err) { console.error('Manual connection failed:', err); }
   }, [manualAddress, connectWallet]);
-
-  const handleNormalConnect = useCallback(async () => {
-    try { await connectWallet(); } catch (err) { console.error('Connection failed:', err); }
-  }, [connectWallet]);
 
   if (account) {
     return (
@@ -69,56 +65,43 @@ const WalletConnect = () => {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        className="btn-primary text-xs py-2 px-4"
-        onClick={handleNormalConnect}
-        disabled={isConnecting}
-      >
-        {isConnecting ? (
-          <>
-            <div className="w-3.5 h-3.5 border-2 border-surface-950/30 border-t-surface-950 rounded-full animate-spin" />
-            Connecting...
-          </>
-        ) : (
-          <>
-            <Wallet className="w-3.5 h-3.5" />
-            Connect
-          </>
-        )}
-      </button>
-
+    <div className="relative">
       <button
         onClick={() => setShowManualInput(!showManualInput)}
-        className="btn-ghost text-xs py-2"
+        className="btn-ghost text-xs py-2 flex items-center gap-1.5"
       >
-        Manual
+        <Link className="w-3.5 h-3.5" />
+        Connect Manually
       </button>
 
       {showManualInput && (
-        <div className="absolute top-full right-0 mt-2 w-80 card p-4 z-50 space-y-3">
-          <p className="text-xs text-slate-400">Enter wallet address manually</p>
-          <input
-            type="text"
-            placeholder="0x..."
-            value={manualAddress}
-            onChange={(e) => setManualAddress(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleManualConnect()}
-            className="input-field text-xs font-mono"
-          />
-          {manualAddress && !isValidAddress(manualAddress) && (
-            <p className="text-xs text-rose-400 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> Invalid address format
-            </p>
-          )}
-          <button
-            onClick={handleManualConnect}
-            disabled={!isValidAddress(manualAddress) || isConnecting}
-            className="btn-primary w-full text-xs py-2"
-          >
-            Connect
-          </button>
-        </div>
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowManualInput(false)} />
+          <div className="absolute right-0 mt-2 w-80 card p-4 z-50 space-y-3">
+            <p className="text-xs text-slate-400">Enter wallet address manually</p>
+            <input
+              type="text"
+              placeholder="0x..."
+              value={manualAddress}
+              onChange={(e) => setManualAddress(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleManualConnect()}
+              className="input-field text-xs font-mono"
+              autoFocus
+            />
+            {manualAddress && !isValidAddress(manualAddress) && (
+              <p className="text-xs text-rose-400 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Invalid address format
+              </p>
+            )}
+            <button
+              onClick={handleManualConnect}
+              disabled={!isValidAddress(manualAddress) || isConnecting}
+              className="btn-primary w-full text-xs py-2"
+            >
+              {isConnecting ? 'Connecting...' : 'Connect'}
+            </button>
+          </div>
+        </>
       )}
 
       {error && !showManualInput && (

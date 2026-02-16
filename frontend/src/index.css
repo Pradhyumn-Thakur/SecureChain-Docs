@@ -16,7 +16,7 @@
   body {
     min-height: 100vh;
     background: #0B0F19;
-    overflow-x: hidden;
+    overflow: hidden;
   }
 
   #root {
@@ -224,7 +224,7 @@
 
   /* Ambient glow — stronger, animated */
   .ambient-glow {
-    position: fixed;
+    position: absolute;
     width: 700px;
     height: 700px;
     border-radius: 50%;

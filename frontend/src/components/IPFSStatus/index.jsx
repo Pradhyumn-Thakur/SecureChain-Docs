@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Wifi, WifiOff, Loader2 } from 'lucide-react';
 import ipfsService from '../../utils/ipfs';
 
@@ -6,26 +6,8 @@ const IPFSStatus = ({ onConfigured }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  useEffect(() => {
-    checkConnection();
-  }, [onConfigured]);
-
-  const checkConnection = async () => {
-    try {
-      const connected = ipfsService.isInitialized();
-      if (!connected) {
-        await initializeService();
-      } else {
-        setIsConnected(true);
-        onConfigured?.(true);
-      }
-    } catch {
-      setIsConnected(false);
-      onConfigured?.(false);
-    }
-  };
-
-  const initializeService = async () => {
+  const initializeService = useCallback(async () => {
+    if (isConnecting) return;
     try {
       setIsConnecting(true);
       const initialized = await ipfsService.initialize();
@@ -37,7 +19,32 @@ const IPFSStatus = ({ onConfigured }) => {
     } finally {
       setIsConnecting(false);
     }
-  };
+  }, [onConfigured, isConnecting]);
+
+  useEffect(() => {
+    // Always attempt to initialize on mount
+    const init = async () => {
+      // Check if already initialized (e.g. from another component)
+      if (ipfsService.isInitialized()) {
+        setIsConnected(true);
+        onConfigured?.(true);
+        return;
+      }
+      // Otherwise initialize
+      setIsConnecting(true);
+      try {
+        const initialized = await ipfsService.initialize();
+        setIsConnected(initialized);
+        onConfigured?.(initialized);
+      } catch {
+        setIsConnected(false);
+        onConfigured?.(false);
+      } finally {
+        setIsConnecting(false);
+      }
+    };
+    init();
+  }, []); // Run once on mount
 
   return (
     <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
