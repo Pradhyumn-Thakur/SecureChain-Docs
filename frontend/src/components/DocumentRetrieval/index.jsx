@@ -1,19 +1,19 @@
-import React, { useState, useContext } from 'react';
-import { Download, Search, Key, FileText, AlertCircle, Loader2, Eye } from 'lucide-react';
+import React, { useState, useContext, lazy, Suspense } from 'react';
+import { Download, Search, Key, FileText, AlertCircle, Loader2, Eye, X } from 'lucide-react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../../contexts/Web3Context';
 import { useEncryption } from '../../hooks/useEncryption';
 import { AppContext } from '../../App';
 import ipfsService from '../../utils/ipfs';
 import CryptoUtils from '../../utils/crypto';
-import DocumentViewer from '../DocumentViewer';
-import './DocumentRetrieval.css';
+
+const DocumentViewer = lazy(() => import('../DocumentViewer'));
 
 const DocumentRetrieval = () => {
   const { contract, account } = useWeb3();
   const { decryptFile } = useEncryption();
   const { addNotification } = useContext(AppContext);
-  
+
   const [documentHash, setDocumentHash] = useState('');
   const [encryptionKey, setEncryptionKey] = useState('');
   const [isRetrieving, setIsRetrieving] = useState(false);
@@ -24,27 +24,11 @@ const DocumentRetrieval = () => {
   const [accessLevel, setAccessLevel] = useState('full_access');
 
   const handleRetrieve = async () => {
-    if (!contract || !account) {
-      addNotification('Please connect your wallet first', 'error');
-      return;
-    }
+    if (!contract || !account) { addNotification('Connect your wallet first', 'error'); return; }
+    if (!documentHash.trim()) { setError('Please enter a document hash'); return; }
+    if (!encryptionKey.trim()) { setError('Please enter the encryption key'); return; }
+    if (!ipfsService.isInitialized()) { addNotification('Configure IPFS storage first', 'error'); return; }
 
-    if (!documentHash.trim()) {
-      setError('Please enter a document hash');
-      return;
-    }
-
-    if (!encryptionKey.trim()) {
-      setError('Please enter the encryption key');
-      return;
-    }
-
-    if (!ipfsService.isInitialized()) {
-      addNotification('Please configure IPFS storage first', 'error');
-      return;
-    }
-
-    // Clear all previous state before starting
     setIsRetrieving(true);
     setError('');
     setRetrievedDocument(null);
@@ -52,92 +36,44 @@ const DocumentRetrieval = () => {
     setShowPreview(false);
 
     try {
-      // Step 1: Create user-scoped hash and verify document exists
       setProgress('Verifying document on blockchain...');
-      
       const originalFileHash = documentHash.startsWith('0x') ? documentHash : '0x' + documentHash;
-      
-      // Create user-scoped document hash for privacy-focused retrieval
-      const userScopedHash = ethers.keccak256(
-        ethers.solidityPacked(['address', 'bytes32'], [account, originalFileHash])
-      );
-      
-      // Check if document exists for this user
-      const documentExists = await contract.verifyDocument(userScopedHash);
-      if (!documentExists) {
-        throw new Error('Document not found in your uploads. Make sure you entered the correct original file hash.');
-      }
+      const userScopedHash = ethers.keccak256(ethers.solidityPacked(['address', 'bytes32'], [account, originalFileHash]));
 
-      // Get document details using user-scoped hash
-      const documentDetails = await contract.getDocument(userScopedHash);
-      const ipfsCID = documentDetails.ipfsCID;
-      
-      addNotification('Document found on blockchain!', 'success');
+      const exists = await contract.verifyDocument(userScopedHash);
+      if (!exists) throw new Error('Document not found. Check the hash and try again.');
 
-      // Step 2: Retrieve encrypted file from IPFS
-      setProgress('Downloading encrypted file from IPFS...');
-      
-      const ipfsResult = await ipfsService.retrieveEncryptedFile(ipfsCID);
-      
-      addNotification('File downloaded from IPFS!', 'success');
+      const details = await contract.getDocument(userScopedHash);
+      addNotification('Document found on blockchain', 'success');
 
-      // Step 3: Decrypt the file
-      setProgress('Decrypting file...');
-      
-      // Parse the encryption key using CryptoUtils
+      setProgress('Downloading from IPFS...');
+      const ipfsResult = await ipfsService.retrieveEncryptedFile(details.ipfsCID);
+      addNotification('Downloaded from IPFS', 'success');
+
+      setProgress('Decrypting...');
       let cryptoKey;
-      try {
-        cryptoKey = await CryptoUtils.importKey(encryptionKey);
-      } catch (keyError) {
-        throw new Error('Invalid encryption key format: ' + keyError.message);
-      }
+      try { cryptoKey = await CryptoUtils.importKey(encryptionKey); }
+      catch (e) { throw new Error('Invalid encryption key: ' + e.message); }
 
-      // Prepare encrypted data structure for decryption
-      // Note: IV is embedded in the encrypted data, not stored separately
-      const encryptedDataForDecrypt = {
-        encryptedData: ipfsResult.data,
-        originalHash: documentDetails.documentHash,
-        fileName: documentDetails.fileName
-      };
+      const decryptedResult = await decryptFile(
+        { encryptedData: ipfsResult.data, originalHash: details.documentHash, fileName: details.fileName },
+        cryptoKey
+      );
 
-      const decryptedResult = await decryptFile(encryptedDataForDecrypt, cryptoKey);
-      
-      setRetrievedDocument({
-        ...decryptedResult,
-        ipfsCID,
-        blockchainHash: userScopedHash,
-        metadata: ipfsResult.metadata
-      });
-
+      setRetrievedDocument({ ...decryptedResult, ipfsCID: details.ipfsCID, blockchainHash: userScopedHash, metadata: ipfsResult.metadata });
       setProgress('');
-      addNotification('Document decrypted successfully!', 'success');
-
+      addNotification('Document decrypted successfully', 'success');
     } catch (err) {
-      console.error('Document retrieval error:', err);
-      console.error('Error details:', {
-        message: err.message,
-        stack: err.stack,
-        documentHash,
-        account,
-        timestamp: new Date().toISOString()
-      });
-      
-      const errorMessage = err.message || 'Failed to retrieve document';
-      setError(`Retrieval failed: ${errorMessage}`);
-      addNotification(`Retrieval failed: ${errorMessage}`, 'error');
+      console.error('Retrieval error:', err);
+      setError(err.message || 'Failed to retrieve document');
+      addNotification(err.message || 'Retrieval failed', 'error');
       setProgress('');
-    } finally {
-      setIsRetrieving(false);
-    }
+    } finally { setIsRetrieving(false); }
   };
 
   const handleDownload = () => {
     if (!retrievedDocument) return;
-
-    const blob = new Blob([retrievedDocument.decryptedData], {
-      type: retrievedDocument.mimeType || 'application/octet-stream'
-    });
-
+    const blob = new Blob([retrievedDocument.decryptedData], { type: retrievedDocument.mimeType || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -146,8 +82,7 @@ const DocumentRetrieval = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    addNotification('File downloaded successfully!', 'success');
+    addNotification('File downloaded', 'success');
   };
 
   const clearForm = () => {
@@ -157,179 +92,152 @@ const DocumentRetrieval = () => {
     setRetrievedDocument(null);
     setProgress('');
     setShowPreview(false);
-    
-    // Force browser to clear any cached data
-    if (typeof window !== 'undefined' && window.gc) {
-      window.gc(); // Garbage collection if available in dev mode
-    }
   };
 
   return (
-    <div className="document-retrieval">
-      <div className="retrieval-header">
-        <h3>
-          <Download className="h-5 w-5" />
-          Retrieve Document
-        </h3>
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-display text-2xl font-bold text-white mb-1">Retrieve Document</h1>
+        <p className="text-sm text-slate-400">Download and decrypt a previously stored document.</p>
       </div>
 
       {!account ? (
-        <div className="connect-prompt">
-          <p>Connect your wallet to retrieve documents</p>
+        <div className="card p-8 text-center">
+          <Download className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="text-sm text-slate-400">Connect your wallet to retrieve documents</p>
         </div>
       ) : (
-        <div className="retrieval-content">
-          <div className="privacy-notice">
-            <h4>🔒 Privacy Notice</h4>
-            <p>You can only retrieve documents that you uploaded yourself. Each user's documents are completely private and isolated.</p>
+        <div className="space-y-6">
+          {/* Privacy notice */}
+          <div className="flex gap-3 p-4 rounded-lg bg-cyber-500/5 border border-cyber-500/10">
+            <Key className="w-4 h-4 text-cyber-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-400">
+              <p className="font-medium text-cyber-400">Privacy-focused retrieval</p>
+              <p className="mt-0.5">You can only retrieve documents you uploaded. Each user's documents are private and isolated.</p>
+            </div>
           </div>
-          
-          <div className="input-section">
-            <div className="input-group">
-              <label htmlFor="document-hash">
-                <Search className="h-4 w-4" />
-                Original File Hash
+
+          {/* Form */}
+          <div className="card p-6 space-y-5">
+            <div className="space-y-1.5">
+              <label className="label-text">
+                <Search className="w-3.5 h-3.5" /> Original File Hash
               </label>
               <input
-                id="document-hash"
                 type="text"
                 value={documentHash}
                 onChange={(e) => setDocumentHash(e.target.value)}
-                placeholder="Enter the original file hash from when you uploaded"
-                className="hash-input"
+                placeholder="Enter the original file hash from upload"
+                className="input-field font-mono text-xs"
                 disabled={isRetrieving}
               />
-              <small className="input-help">
-                This is the hash shown during file encryption (before upload)
-              </small>
+              <p className="text-[10px] text-slate-600">The hash shown during encryption (before upload)</p>
             </div>
 
-            <div className="input-group">
-              <label htmlFor="encryption-key">
-                <Key className="h-4 w-4" />
-                Encryption Key
+            <div className="space-y-1.5">
+              <label className="label-text">
+                <Key className="w-3.5 h-3.5" /> Encryption Key
               </label>
               <textarea
-                id="encryption-key"
                 value={encryptionKey}
                 onChange={(e) => setEncryptionKey(e.target.value)}
-                placeholder="Paste your encryption key (64-character hex string, e.g., a1b2c3d4e5f6...)"
-                className="key-input"
+                placeholder="Paste your encryption key (64-character hex)"
+                className="input-field font-mono text-xs resize-none"
                 rows="2"
                 disabled={isRetrieving}
               />
-              <small className="input-help">
-                This should be the hex key you copied during file encryption (64 characters)
-              </small>
             </div>
-          </div>
 
-          {progress && (
-            <div className="progress-info">
-              <Loader2 className="animate-spin h-4 w-4" />
-              <span>{progress}</span>
-            </div>
-          )}
+            {/* Progress */}
+            {progress && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-cyber-500/5 border border-cyber-500/10">
+                <Loader2 className="w-4 h-4 text-cyber-400 animate-spin" />
+                <span className="text-xs text-cyber-300">{progress}</span>
+              </div>
+            )}
 
-          <div className="action-buttons">
-            <button
-              onClick={handleRetrieve}
-              disabled={isRetrieving || !documentHash.trim() || !encryptionKey.trim()}
-              className="retrieve-button"
-            >
-              {isRetrieving ? (
-                <>
-                  <Loader2 className="animate-spin h-5 w-5" />
-                  Retrieving...
-                </>
-              ) : (
-                <>
-                  <Search className="h-5 w-5" />
-                  Retrieve Document
-                </>
-              )}
-            </button>
-
-            {(documentHash || encryptionKey || retrievedDocument) && (
+            {/* Actions */}
+            <div className="flex gap-3">
               <button
-                onClick={clearForm}
-                disabled={isRetrieving}
-                className="clear-button"
+                onClick={handleRetrieve}
+                disabled={isRetrieving || !documentHash.trim() || !encryptionKey.trim()}
+                className="btn-primary flex-1"
               >
-                Clear
+                {isRetrieving ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Retrieving...</>
+                ) : (
+                  <><Search className="w-4 h-4" /> Retrieve Document</>
+                )}
               </button>
+              {(documentHash || encryptionKey || retrievedDocument) && (
+                <button onClick={clearForm} disabled={isRetrieving} className="btn-secondary">
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="p-3 rounded-lg bg-rose-500/5 border border-rose-500/10">
+                <p className="text-xs text-rose-400 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
+                </p>
+              </div>
             )}
           </div>
 
-          {error && (
-            <div className="error-message">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
-            </div>
-          )}
-
+          {/* Retrieved document */}
           {retrievedDocument && (
-            <div className="retrieved-document">
-              <div className="document-info">
-                <h4>
-                  <FileText className="h-5 w-5" />
-                  Document Retrieved Successfully
-                </h4>
-                <div className="document-details">
-                  <p><strong>File Name:</strong> {retrievedDocument.fileName}</p>
-                  <p><strong>File Size:</strong> {(retrievedDocument.decryptedData.byteLength / 1024 / 1024).toFixed(2)} MB</p>
-                  <p><strong>IPFS CID:</strong> <code>{retrievedDocument.ipfsCID}</code></p>
-                  <p><strong>Blockchain Hash:</strong> <code>{retrievedDocument.blockchainHash}</code></p>
-                  {retrievedDocument.metadata?.keyvalues?.uploadedAt && (
-                    <p><strong>Uploaded:</strong> {new Date(retrievedDocument.metadata.keyvalues.uploadedAt).toLocaleString()}</p>
-                  )}
+            <div className="card p-6 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-emerald-400">Document Retrieved</p>
+                  <p className="text-xs text-slate-500">{retrievedDocument.fileName}</p>
                 </div>
               </div>
 
-              <div className="document-actions">
-                <button
-                  onClick={() => {
-                    console.log('Preview button clicked, setting showPreview to true');
-                    console.log('Retrieved document data:', {
-                      hasDecryptedData: !!retrievedDocument?.decryptedData,
-                      fileName: retrievedDocument?.fileName,
-                      dataType: typeof retrievedDocument?.decryptedData,
-                      dataLength: retrievedDocument?.decryptedData?.length
-                    });
-                    setShowPreview(true);
-                  }}
-                  className="preview-button"
-                >
-                  <Eye className="h-5 w-5" />
-                  Preview Document
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Size</p>
+                  <p className="text-sm text-slate-200 font-medium mt-0.5">{(retrievedDocument.decryptedData.byteLength / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+                <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">IPFS CID</p>
+                  <p className="text-xs text-cyber-400 font-mono mt-0.5 truncate">{retrievedDocument.ipfsCID}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setShowPreview(true)} className="btn-secondary flex-1">
+                  <Eye className="w-4 h-4" /> Preview
                 </button>
-                
-                <button
-                  onClick={handleDownload}
-                  className="download-button"
-                >
-                  <Download className="h-5 w-5" />
-                  Download File
+                <button onClick={handleDownload} className="btn-primary flex-1">
+                  <Download className="w-4 h-4" /> Download
                 </button>
               </div>
             </div>
           )}
         </div>
       )}
-      
-      {/* Document Preview Modal */}
-      {console.log('Modal render check:', { showPreview, hasRetrievedDocument: !!retrievedDocument })}
+
+      {/* Document viewer modal */}
       {showPreview && retrievedDocument && (
-        <DocumentViewer
-          documentData={retrievedDocument.decryptedData}
-          fileName={retrievedDocument.fileName}
-          accessLevel={accessLevel}
-          allowDownload={accessLevel !== 'view_only'}
-          onClose={() => {
-            console.log('Closing preview modal');
-            setShowPreview(false);
-          }}
-        />
+        <Suspense fallback={
+          <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 text-accent-400 animate-spin" />
+          </div>
+        }>
+          <DocumentViewer
+            documentData={retrievedDocument.decryptedData}
+            fileName={retrievedDocument.fileName}
+            accessLevel={accessLevel}
+            allowDownload={accessLevel !== 'view_only'}
+            onClose={() => setShowPreview(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

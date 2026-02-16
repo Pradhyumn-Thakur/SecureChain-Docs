@@ -1,18 +1,7 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { 
-  Key, 
-  Eye, 
-  EyeOff, 
-  Copy, 
-  Download, 
-  Upload, 
-  AlertCircle, 
-  Check,
-  RefreshCw 
-} from 'lucide-react';
+import { Key, Eye, EyeOff, Copy, Download, Upload, AlertCircle, Check, RefreshCw } from 'lucide-react';
 import CryptoUtils from '../../utils/crypto';
 import { AppContext } from '../../App';
-import './KeyManagement.css';
 
 function KeyManagement({ onKeyGenerated }) {
   const [encryptionKey, setEncryptionKey] = useState(null);
@@ -25,7 +14,6 @@ function KeyManagement({ onKeyGenerated }) {
   const hasLoadedKey = useRef(false);
 
   useEffect(() => {
-    // Load existing key from IndexedDB on component mount
     if (!hasLoadedKey.current) {
       hasLoadedKey.current = true;
       loadStoredKey();
@@ -33,14 +21,11 @@ function KeyManagement({ onKeyGenerated }) {
   }, []);
 
   useEffect(() => {
-    // Export key to string when key changes
     if (encryptionKey) {
       CryptoUtils.exportKey(encryptionKey)
         .then(exported => {
           setKeyString(exported);
-          if (onKeyGenerated) {
-            onKeyGenerated(encryptionKey);
-          }
+          if (onKeyGenerated) onKeyGenerated(encryptionKey);
         })
         .catch(err => console.error('Failed to export key:', err));
     }
@@ -48,48 +33,26 @@ function KeyManagement({ onKeyGenerated }) {
 
   const loadStoredKey = async () => {
     try {
-      // Try to load the most recent key
       const keyData = await CryptoUtils.getKeyFromDB('current');
-      if (keyData && keyData.key) {
-        setEncryptionKey(keyData.key);
-      }
-    } catch (err) {
-      // No stored key, that's okay
-      console.log('No stored key found');
-    }
+      if (keyData && keyData.key) setEncryptionKey(keyData.key);
+    } catch { console.log('No stored key found'); }
   };
 
   const generateKey = async () => {
     setIsGenerating(true);
     setImportError('');
-    
     try {
       const key = await CryptoUtils.generateKey();
       setEncryptionKey(key);
-      
-      // Store as current key with basic metadata
-      const metadata = {
-        accessLevel: 'owner',
-        userId: 'current_user',
-        expirationTime: 0,
-        createdAt: Date.now()
-      };
-      
+      const metadata = { accessLevel: 'owner', userId: 'current_user', expirationTime: 0, createdAt: Date.now() };
       await CryptoUtils.storeKeyInDB('current', key, metadata);
-      
-      // Also store with timestamp for history
-      const keyId = `key_${Date.now()}`;
-      await CryptoUtils.storeKeyInDB(keyId, key, metadata);
-      
+      await CryptoUtils.storeKeyInDB(`key_${Date.now()}`, key, metadata);
       addNotification('Encryption key generated successfully', 'success');
-      
     } catch (error) {
       console.error('Key generation error:', error);
       setImportError('Failed to generate key');
       addNotification('Failed to generate key', 'error');
-    } finally {
-      setIsGenerating(false);
-    }
+    } finally { setIsGenerating(false); }
   };
 
   const copyKey = () => {
@@ -116,29 +79,15 @@ function KeyManagement({ onKeyGenerated }) {
   const importKey = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     setImportError('');
-
     try {
       const hexKey = await file.text();
       const key = await CryptoUtils.importKey(hexKey.trim());
       setEncryptionKey(key);
-      
-      // Store as current key with basic metadata
-      const metadata = {
-        accessLevel: 'owner',
-        userId: 'current_user',
-        expirationTime: 0,
-        createdAt: Date.now()
-      };
-      
+      const metadata = { accessLevel: 'owner', userId: 'current_user', expirationTime: 0, createdAt: Date.now() };
       await CryptoUtils.storeKeyInDB('current', key, metadata);
-      
-      // Reset file input
       event.target.value = '';
-      
       addNotification('Key imported successfully', 'success');
-      
     } catch (error) {
       console.error('Key import error:', error);
       setImportError(error.message);
@@ -146,131 +95,98 @@ function KeyManagement({ onKeyGenerated }) {
     }
   };
 
+  if (!encryptionKey) {
+    return (
+      <div className="space-y-5">
+        <div className="text-center py-4">
+          <div className="w-14 h-14 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mx-auto mb-3">
+            <Key className="w-7 h-7 text-slate-500" />
+          </div>
+          <p className="text-sm text-slate-300 font-medium">No encryption key found</p>
+          <p className="text-xs text-slate-500 mt-1">Generate a new key or import an existing one</p>
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={generateKey} disabled={isGenerating} className="btn-primary flex-1">
+            {isGenerating ? (
+              <><RefreshCw className="w-4 h-4 animate-spin" /> Generating...</>
+            ) : (
+              <><Key className="w-4 h-4" /> Generate Key</>
+            )}
+          </button>
+          <label className="btn-secondary flex-1 cursor-pointer">
+            <Upload className="w-4 h-4" /> Import Key
+            <input type="file" onChange={importKey} accept=".txt" className="hidden" />
+          </label>
+        </div>
+
+        {importError && (
+          <p className="text-xs text-rose-400 flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5" /> {importError}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="key-management">
-      <div className="key-header">
-        <h3>Encryption Key</h3>
-        <Key className="h-5 w-5 text-gray-400" />
+    <div className="space-y-4">
+      {/* Key display */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Your Encryption Key</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowKey(!showKey)} className="btn-ghost p-1.5" title={showKey ? 'Hide key' : 'Show key'}>
+              {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={copyKey} className="btn-ghost p-1.5" title="Copy key">
+              {copySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={downloadKey} className="btn-ghost p-1.5" title="Download key">
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-4 py-3 rounded-lg bg-surface-950/80 border border-white/[0.06] font-mono text-xs break-all">
+          {showKey ? (
+            <span className="text-accent-400">{keyString}</span>
+          ) : (
+            <span className="text-slate-600 select-none">{'*'.repeat(64)}</span>
+          )}
+        </div>
+
+        {copySuccess && (
+          <p className="text-xs text-emerald-400 flex items-center gap-1">
+            <Check className="w-3 h-3" /> Copied to clipboard
+          </p>
+        )}
       </div>
 
-      {!encryptionKey ? (
-        <div className="no-key-container">
-          <div className="no-key-message">
-            <Key className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p>No encryption key found</p>
-            <span>Generate a new key or import an existing one to get started</span>
-          </div>
-
-          <div className="key-actions">
-            <button
-              onClick={generateKey}
-              disabled={isGenerating}
-              className="generate-button"
-            >
-              {isGenerating ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Key className="h-4 w-4 mr-2" />
-                  Generate New Key
-                </>
-              )}
-            </button>
-
-            <label className="import-button">
-              <Upload className="h-4 w-4 mr-2" />
-              Import Key
-              <input
-                type="file"
-                onChange={importKey}
-                accept=".txt"
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>
-
-          {importError && (
-            <div className="error-message">
-              <AlertCircle className="h-4 w-4" />
-              <span>{importError}</span>
-            </div>
-          )}
+      {/* Warning */}
+      <div className="flex gap-3 p-3 rounded-lg bg-accent-500/5 border border-accent-500/10">
+        <AlertCircle className="w-4 h-4 text-accent-500 shrink-0 mt-0.5" />
+        <div className="text-xs text-slate-400">
+          <p className="font-medium text-accent-400">Save this key securely</p>
+          <p className="mt-0.5">You'll need it to decrypt your files. Lost keys cannot be recovered.</p>
         </div>
-      ) : (
-        <div className="key-container">
-          <div className="key-display-section">
-            <div className="key-label">
-              <span>Your Encryption Key</span>
-              <div className="key-actions-inline">
-                <button
-                  onClick={() => setShowKey(!showKey)}
-                  className="icon-button"
-                  title={showKey ? 'Hide key' : 'Show key'}
-                >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={copyKey}
-                  className="icon-button"
-                  title="Copy key"
-                >
-                  {copySuccess ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={downloadKey}
-                  className="icon-button"
-                  title="Download key"
-                >
-                  <Download className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+      </div>
 
-            <div className={`key-value ${!showKey ? 'key-hidden' : ''}`}>
-              {showKey ? keyString : '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'}
-            </div>
+      {/* Secondary actions */}
+      <div className="flex gap-2 pt-1">
+        <button onClick={generateKey} className="btn-ghost text-xs">
+          <RefreshCw className="w-3 h-3" /> New key
+        </button>
+        <label className="btn-ghost text-xs cursor-pointer">
+          <Upload className="w-3 h-3" /> Import different
+          <input type="file" onChange={importKey} accept=".txt" className="hidden" />
+        </label>
+      </div>
 
-            {copySuccess && (
-              <div className="copy-success">
-                <Check className="h-3 w-3" />
-                <span>Copied to clipboard!</span>
-              </div>
-            )}
-          </div>
-
-          <div className="key-warning">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <div>
-              <p><strong>Important:</strong> Save this key securely!</p>
-              <p>You'll need it to decrypt your files. If you lose this key, your encrypted files cannot be recovered.</p>
-            </div>
-          </div>
-
-          <div className="key-footer">
-            <button onClick={generateKey} className="text-button">
-              Generate new key
-            </button>
-            <label className="text-button">
-              Import different key
-              <input
-                type="file"
-                onChange={importKey}
-                accept=".txt"
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>add
-
-          {importError && (
-            <div className="error-message">
-              <AlertCircle className="h-4 w-4" />
-              <span>{importError}</span>
-            </div>
-          )}
-        </div>
+      {importError && (
+        <p className="text-xs text-rose-400 flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5" /> {importError}
+        </p>
       )}
     </div>
   );

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Check, AlertCircle, ExternalLink, Shield } from 'lucide-react';
+import { Settings, Check, AlertCircle, ExternalLink, Shield, Loader2, RefreshCw, X } from 'lucide-react';
 import ipfsService, { testIPFSConnection } from '../../utils/ipfs';
-import './IPFSConfig.css';
 
 const IPFSConfig = ({ onConfigured }) => {
   const [isConfigured, setIsConfigured] = useState(false);
@@ -9,16 +8,12 @@ const IPFSConfig = ({ onConfigured }) => {
   const [error, setError] = useState('');
   const [usageStats, setUsageStats] = useState(null);
 
-  // Check if backend is available and initialize on mount
-  useEffect(() => {
-    initializeService();
-  }, [onConfigured]);
+  useEffect(() => { initializeService(); }, [onConfigured]);
 
   const initializeService = async () => {
     try {
       setIsConnecting(true);
       setError('');
-      
       const initialized = await ipfsService.initialize();
       if (initialized) {
         setIsConfigured(true);
@@ -27,7 +22,7 @@ const IPFSConfig = ({ onConfigured }) => {
       } else {
         throw new Error('Failed to authenticate with secure backend');
       }
-    } catch (err) {
+    } catch {
       setError('Backend service unavailable. Please ensure the server is running.');
       setIsConfigured(false);
       onConfigured?.(false);
@@ -40,13 +35,7 @@ const IPFSConfig = ({ onConfigured }) => {
     try {
       const stats = await ipfsService.getUsageStats();
       setUsageStats(stats);
-    } catch (err) {
-      console.warn('Could not load usage stats:', err);
-    }
-  };
-
-  const handleReconnect = async () => {
-    await initializeService();
+    } catch {}
   };
 
   const handleDisconnect = () => {
@@ -58,115 +47,128 @@ const IPFSConfig = ({ onConfigured }) => {
 
   const formatUsage = (used, limit) => {
     if (!used || !limit) return 'N/A';
-    const percentage = ((used / limit) * 100).toFixed(1);
-    return `${ipfsService.formatFileSize(used)} / ${ipfsService.formatFileSize(limit)} (${percentage}%)`;
+    const pct = ((used / limit) * 100).toFixed(1);
+    return `${ipfsService.formatFileSize(used)} / ${ipfsService.formatFileSize(limit)} (${pct}%)`;
   };
 
   return (
-    <div className="ipfs-config">
-      <div className="config-header">
-        <h3>
-          <Settings className="h-5 w-5" />
-          IPFS Configuration
-        </h3>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Settings className="w-4 h-4 text-accent-400" />
+          <h3 className="font-display font-semibold text-white text-sm">IPFS Configuration</h3>
+        </div>
         {isConfigured && (
-          <div className="status-badge connected">
-            <Check className="h-4 w-4" />
-            Connected
-          </div>
+          <span className="badge-emerald flex items-center gap-1">
+            <Check className="w-3 h-3" /> Connected
+          </span>
         )}
       </div>
 
       {!isConfigured ? (
-        <div className="config-form">
-          <div className="info-section">
-            <h4><Shield className="h-5 w-5 inline mr-2" />Secure IPFS Storage</h4>
-            <p>
-              This application uses a secure backend service to handle IPFS operations through Pinata. 
+        <div className="space-y-4">
+          {/* Info */}
+          <div className="card p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-accent-400" />
+              <h4 className="text-sm font-semibold text-white">Secure IPFS Storage</h4>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              This application uses a secure backend service to handle IPFS operations through Pinata.
               Your files are encrypted client-side and stored securely without exposing API keys.
             </p>
-            <div className="security-features">
-              <h5>Security Features:</h5>
-              <ul>
-                <li>✅ Client-side encryption before upload</li>
-                <li>✅ Secure backend API with signed JWTs</li>
-                <li>✅ No API keys stored in browser</li>
-                <li>✅ Rate limiting and CORS protection</li>
-                <li>✅ Short-lived authentication tokens</li>
-              </ul>
+            <div className="space-y-1.5 pt-1">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">Security Features</p>
+              {[
+                'Client-side encryption before upload',
+                'Secure backend API with signed JWTs',
+                'No API keys stored in browser',
+                'Rate limiting and CORS protection',
+                'Short-lived authentication tokens',
+              ].map((feat, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                  <span className="text-xs text-slate-400">{feat}</span>
+                </div>
+              ))}
             </div>
           </div>
 
+          {/* Connect button */}
           {isConnecting ? (
-            <div className="connecting-status">
-              <div className="spinner" />
-              <span>Connecting to secure backend...</span>
+            <div className="flex items-center gap-2 justify-center py-3">
+              <Loader2 className="w-4 h-4 text-accent-400 animate-spin" />
+              <span className="text-xs text-slate-400">Connecting to secure backend...</span>
             </div>
           ) : (
-            <button
-              onClick={handleReconnect}
-              className="connect-button"
-            >
+            <button onClick={initializeService} className="btn-primary w-full text-xs py-2.5">
               Connect to Secure Storage
             </button>
           )}
 
+          {/* Error */}
           {error && (
-            <div className="error-message">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
+            <div className="p-3 rounded-lg bg-rose-500/5 border border-rose-500/10 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span className="text-xs text-rose-400">{error}</span>
+              </div>
               {error.includes('Backend service unavailable') && (
-                <div className="setup-help">
-                  <p>To start the backend service:</p>
-                  <code>cd backend && npm install && npm start</code>
+                <div className="mt-2 p-2 rounded bg-surface-950 border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500 mb-1">To start the backend:</p>
+                  <code className="text-[10px] text-cyber-400 font-mono">cd backend && npm install && npm start</code>
                 </div>
               )}
             </div>
           )}
 
-          <div className="help-links">
-            <a 
-              href="https://docs.pinata.cloud/docs/getting-started" 
-              target="_blank" 
+          {/* Help link */}
+          <div className="text-center">
+            <a
+              href="https://docs.pinata.cloud/docs/getting-started"
+              target="_blank"
               rel="noopener noreferrer"
+              className="text-xs text-accent-400 hover:text-accent-300 inline-flex items-center gap-1 transition-colors"
             >
-              About IPFS Storage <ExternalLink className="h-3 w-3" />
+              About IPFS Storage <ExternalLink className="w-3 h-3" />
             </a>
           </div>
         </div>
       ) : (
-        <div className="config-status">
-          <div className="connection-info">
-            <h4>✅ Secure IPFS Storage Ready</h4>
-            <p>Your documents will be encrypted client-side and stored securely on IPFS via our backend service.</p>
+        <div className="space-y-4">
+          {/* Connection status */}
+          <div className="card p-4 space-y-2">
+            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-400" /> Secure IPFS Storage Ready
+            </h4>
+            <p className="text-xs text-slate-400">Documents are encrypted client-side and stored on IPFS via the backend.</p>
           </div>
 
+          {/* Usage stats */}
           {usageStats && (
-            <div className="usage-stats">
-              <h5>Storage Usage</h5>
-              <div className="stats-grid">
-                <div className="stat-item">
-                  <span className="stat-label">Storage:</span>
-                  <span className="stat-value">
-                    {formatUsage(usageStats.totalStorage, usageStats.storageLimit)}
-                  </span>
+            <div className="card p-4 space-y-2">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">Storage Usage</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-2.5 rounded-lg bg-surface-950 border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500">Storage</p>
+                  <p className="text-xs text-slate-300 font-medium mt-0.5">{formatUsage(usageStats.totalStorage, usageStats.storageLimit)}</p>
                 </div>
-                <div className="stat-item">
-                  <span className="stat-label">Files:</span>
-                  <span className="stat-value">
-                    {usageStats.fileCount} / {usageStats.fileLimit}
-                  </span>
+                <div className="p-2.5 rounded-lg bg-surface-950 border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500">Files</p>
+                  <p className="text-xs text-slate-300 font-medium mt-0.5">{usageStats.fileCount} / {usageStats.fileLimit}</p>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="config-actions">
-            <button onClick={handleReconnect} className="reconnect-button">
-              Refresh Connection
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button onClick={initializeService} className="btn-secondary flex-1 text-xs py-2">
+              <RefreshCw className="w-3 h-3" /> Refresh
             </button>
-            <button onClick={handleDisconnect} className="disconnect-button">
-              Disconnect
+            <button onClick={handleDisconnect} className="btn-danger text-xs py-2 px-4">
+              <X className="w-3 h-3" /> Disconnect
             </button>
           </div>
         </div>

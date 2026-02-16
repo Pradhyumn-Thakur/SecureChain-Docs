@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Table, Download, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
-import './ExcelViewer.css';
+import { Table, Download, ChevronLeft, ChevronRight, Maximize2, Loader2 } from 'lucide-react';
 
 const ExcelViewer = ({ documentData, fileName, onError, allowDownload, onDownload }) => {
   const [workbook, setWorkbook] = useState(null);
@@ -12,145 +11,83 @@ const ExcelViewer = ({ documentData, fileName, onError, allowDownload, onDownloa
   const [error, setError] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  useEffect(() => {
-    parseExcelFile();
-  }, [documentData]);
+  useEffect(() => { parseExcelFile(); }, [documentData]);
 
   useEffect(() => {
-    if (workbook && sheetNames.length > 0) {
-      loadSheetData(currentSheet);
-    }
+    if (workbook && sheetNames.length > 0) loadSheetData(currentSheet);
   }, [workbook, currentSheet, sheetNames]);
 
   const parseExcelFile = async () => {
     setLoading(true);
     setError('');
-
     try {
-      console.log('Parsing Excel file, data type:', typeof documentData, 'length:', documentData?.length);
-
-      // Ensure we have an ArrayBuffer
       let arrayBuffer;
       if (documentData instanceof Uint8Array) {
-        arrayBuffer = documentData.buffer.slice(
-          documentData.byteOffset,
-          documentData.byteOffset + documentData.byteLength
-        );
+        arrayBuffer = documentData.buffer.slice(documentData.byteOffset, documentData.byteOffset + documentData.byteLength);
       } else if (documentData instanceof ArrayBuffer) {
         arrayBuffer = documentData;
       } else {
         throw new Error('Invalid document data format');
       }
-
-      // Parse Excel file
       const wb = XLSX.read(arrayBuffer, { type: 'array' });
-      
-      console.log('Excel workbook parsed:', {
-        sheetNames: wb.SheetNames,
-        sheetCount: wb.SheetNames.length
-      });
-
       setWorkbook(wb);
       setSheetNames(wb.SheetNames);
       setCurrentSheet(0);
-      setLoading(false);
-
     } catch (err) {
-      console.error('Excel parsing error:', err);
       setError('Failed to parse Excel file: ' + err.message);
+      onError?.(err.message);
+    } finally {
       setLoading(false);
-      if (onError) {
-        onError(err.message);
-      }
     }
   };
 
   const loadSheetData = (sheetIndex) => {
     if (!workbook || !sheetNames[sheetIndex]) return;
-
     try {
       const worksheet = workbook.Sheets[sheetNames[sheetIndex]];
-      
-      // Convert sheet to JSON with header row
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-        header: 1,
-        defval: '',
-        blankrows: false
-      });
-
-      console.log('Sheet data loaded:', {
-        sheetName: sheetNames[sheetIndex],
-        rows: jsonData.length,
-        columns: jsonData[0]?.length || 0
-      });
-
-      setSheetData(jsonData);
+      setSheetData(XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false }));
     } catch (err) {
-      console.error('Sheet loading error:', err);
       setError('Failed to load sheet data: ' + err.message);
     }
   };
 
-  const goToPrevSheet = () => {
-    setCurrentSheet(prev => Math.max(0, prev - 1));
-  };
-
-  const goToNextSheet = () => {
-    setCurrentSheet(prev => Math.min(sheetNames.length - 1, prev + 1));
-  };
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
   const exportToCSV = () => {
     if (!workbook || !sheetNames[currentSheet]) return;
-
     try {
-      const worksheet = workbook.Sheets[sheetNames[currentSheet]];
-      const csv = XLSX.utils.sheet_to_csv(worksheet);
-      
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
+      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetNames[currentSheet]]);
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
       const a = document.createElement('a');
       a.href = url;
       a.download = `${sheetNames[currentSheet]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('CSV export error:', err);
-      alert('Failed to export CSV');
-    }
+    } catch {}
   };
 
-  const formatCellValue = (value) => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'number') {
-      // Format numbers with appropriate precision
-      return value % 1 === 0 ? value.toString() : value.toFixed(2);
-    }
-    return String(value);
+  const formatCell = (v) => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'number') return v % 1 === 0 ? v.toString() : v.toFixed(2);
+    return String(v);
   };
 
   if (loading) {
     return (
-      <div className="excel-viewer-loading">
-        <div className="spinner"></div>
-        <p>Parsing Excel file...</p>
+      <div className="flex flex-col items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 text-accent-400 animate-spin mb-2" />
+        <p className="text-xs text-slate-400">Parsing Excel file...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="excel-viewer-error">
-        <Table className="h-16 w-16 text-red-400" />
-        <h3>Parsing Failed</h3>
-        <p>{error}</p>
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Table className="w-12 h-12 text-slate-600 mb-3" />
+        <p className="text-sm text-slate-300 font-medium">Parsing Failed</p>
+        <p className="text-xs text-slate-500 mt-1">{error}</p>
         {allowDownload && (
-          <button className="download-btn" onClick={onDownload}>
-            <Download className="h-4 w-4" />
-            Download Original File
+          <button onClick={onDownload} className="btn-primary mt-4 text-xs">
+            <Download className="w-3.5 h-3.5" /> Download Original
           </button>
         )}
       </div>
@@ -158,78 +95,64 @@ const ExcelViewer = ({ documentData, fileName, onError, allowDownload, onDownloa
   }
 
   return (
-    <div className={`excel-viewer ${isFullscreen ? 'fullscreen' : ''}`}>
-      {/* Excel Controls */}
-      <div className="excel-controls">
-        <div className="sheet-navigation">
-          <button 
-            onClick={goToPrevSheet} 
-            disabled={currentSheet <= 0}
-            className="sheet-nav-btn"
-          >
-            <ChevronLeft className="h-4 w-4" />
+    <div className={`space-y-3 ${isFullscreen ? 'fixed inset-0 z-50 bg-surface-900 p-6' : ''}`}>
+      {/* Controls */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-1">
+          <button onClick={() => setCurrentSheet(s => Math.max(0, s - 1))} disabled={currentSheet <= 0} className="btn-ghost p-1.5 disabled:opacity-30">
+            <ChevronLeft className="w-4 h-4" />
           </button>
-          
-          <span className="sheet-info">
-            {sheetNames[currentSheet]} ({currentSheet + 1} of {sheetNames.length})
+          <span className="text-xs text-slate-400 min-w-[120px] text-center">
+            {sheetNames[currentSheet]} ({currentSheet + 1}/{sheetNames.length})
           </span>
-          
-          <button 
-            onClick={goToNextSheet} 
-            disabled={currentSheet >= sheetNames.length - 1}
-            className="sheet-nav-btn"
-          >
-            <ChevronRight className="h-4 w-4" />
+          <button onClick={() => setCurrentSheet(s => Math.min(sheetNames.length - 1, s + 1))} disabled={currentSheet >= sheetNames.length - 1} className="btn-ghost p-1.5 disabled:opacity-30">
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="excel-actions">
-          <button onClick={exportToCSV} className="excel-tool-btn" title="Export as CSV">
-            <Download className="h-4 w-4" />
-            Export CSV
+        <div className="flex items-center gap-1">
+          <button onClick={exportToCSV} className="btn-ghost text-xs" title="Export as CSV">
+            <Download className="w-3 h-3" /> CSV
           </button>
-          
-          <button onClick={toggleFullscreen} className="excel-tool-btn" title="Fullscreen">
-            <Maximize2 className="h-4 w-4" />
-            Fullscreen
+          <button onClick={() => setIsFullscreen(!isFullscreen)} className="btn-ghost text-xs" title="Fullscreen">
+            <Maximize2 className="w-3 h-3" />
           </button>
-          
           {allowDownload && (
-            <button onClick={onDownload} className="excel-tool-btn download" title="Download">
-              <Download className="h-4 w-4" />
-              Download
+            <button onClick={onDownload} className="btn-secondary text-xs py-1.5" title="Download">
+              <Download className="w-3 h-3" /> Download
             </button>
           )}
         </div>
       </div>
 
-      {/* Excel Sheet Content */}
-      <div className="excel-content-container">
-        <div className="excel-table-wrapper">
-          <table className="excel-table">
-            <tbody>
-              {sheetData.map((row, rowIndex) => (
-                <tr key={rowIndex} className={rowIndex === 0 ? 'header-row' : ''}>
-                  <td className="row-number">{rowIndex + 1}</td>
-                  {row.map((cell, cellIndex) => (
-                    <td 
-                      key={cellIndex} 
-                      className={rowIndex === 0 ? 'header-cell' : 'data-cell'}
-                    >
-                      {formatCellValue(cell)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Table */}
+      <div className="max-h-[60vh] overflow-auto rounded-lg border border-white/[0.06]">
+        <table className="w-full border-collapse text-xs">
+          <tbody>
+            {sheetData.map((row, ri) => (
+              <tr key={ri} className={ri === 0 ? 'bg-surface-800 sticky top-0 z-10' : ri % 2 === 0 ? 'bg-surface-950' : 'bg-surface-900'}>
+                <td className="px-2 py-1.5 text-[10px] text-slate-600 border-r border-white/[0.06] w-10 text-center font-mono sticky left-0 bg-inherit">
+                  {ri + 1}
+                </td>
+                {row.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className={`px-3 py-1.5 border-r border-b border-white/[0.06] whitespace-nowrap ${
+                      ri === 0 ? 'font-semibold text-slate-200' : 'text-slate-400'
+                    }`}
+                  >
+                    {formatCell(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="excel-footer">
-        <span>
-          {sheetData.length} rows × {sheetData[0]?.length || 0} columns
-        </span>
+      {/* Footer */}
+      <div className="text-[10px] text-slate-600 text-right">
+        {sheetData.length} rows x {sheetData[0]?.length || 0} columns
       </div>
     </div>
   );

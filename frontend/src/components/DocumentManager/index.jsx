@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../../contexts/Web3Context';
 import AccessManagement from '../AccessManagement';
-import { FileText, Users, Calendar, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
-import './DocumentManager.css';
+import { FileText, Users, Calendar, ChevronDown, ChevronUp, ArrowLeft, RefreshCw, Loader2, Search } from 'lucide-react';
 
 const DocumentManager = () => {
   const { account, contract, isConnected } = useWeb3();
@@ -11,278 +10,200 @@ const DocumentManager = () => {
   const [error, setError] = useState('');
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [expandedDocuments, setExpandedDocuments] = useState({});
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (isConnected && account && contract) {
-      loadUserDocuments();
-    }
+    if (isConnected && account && contract) loadUserDocuments();
   }, [isConnected, account, contract]);
 
   const loadUserDocuments = async () => {
     setLoading(true);
     setError('');
-    
     try {
-      // Get user's document count
-      let documentCount = 0;
+      let count = 0;
       try {
         const result = await contract.getUserDocumentCount(account);
-        documentCount = parseInt(result.toString());
-      } catch (countError) {
-        // If getUserDocumentCount fails (likely because user has no documents), treat as 0
-        console.log('No documents found for user (expected for new users):', countError.message);
-        documentCount = 0;
-      }
-      
-      if (documentCount === 0) {
-        setDocuments([]);
-        setLoading(false);
-        return;
-      }
+        count = parseInt(result.toString());
+      } catch { count = 0; }
 
-      // Fetch all documents for the user
-      const documentPromises = [];
-      for (let i = 0; i < documentCount; i++) {
-        documentPromises.push(
-          contract.getDocumentByIndex(account, i).catch(err => {
-            console.warn(`Failed to fetch document at index ${i}:`, err.message);
-            return null; // Return null for failed fetches
-          })
-        );
-      }
+      if (count === 0) { setDocuments([]); setLoading(false); return; }
 
-      const documentResults = await Promise.all(documentPromises);
-      // Filter out null results from failed fetches
-      const validDocuments = documentResults.filter(doc => doc !== null);
-      
-      // Process and format documents
-      const formattedDocuments = await Promise.all(
-        validDocuments.map(async (doc, index) => {
+      const results = await Promise.all(
+        Array.from({ length: count }, (_, i) =>
+          contract.getDocumentByIndex(account, i).catch(() => null)
+        )
+      );
+
+      const docs = results
+        .filter(Boolean)
+        .map((doc, index) => {
           const [documentHash, ipfsCID, timestamp, fileName] = doc;
-          
-          // Get additional metadata if needed
-          let metadata = {};
-          // Note: Access list functionality requires contract upgrade
-          // For now, default to owner-only access
-          metadata.accessCount = 1; // At least the owner
-
           return {
             index,
             documentHash,
             ipfsCID,
             timestamp: new Date(parseInt(timestamp.toString()) * 1000),
             fileName: fileName || `Document ${index + 1}`,
-            metadata
+            metadata: { accessCount: 1 }
           };
         })
-      );
+        .sort((a, b) => b.timestamp - a.timestamp);
 
-      // Sort by timestamp (newest first)
-      formattedDocuments.sort((a, b) => b.timestamp - a.timestamp);
-      
-      setDocuments(formattedDocuments);
+      setDocuments(docs);
     } catch (err) {
       console.error('Failed to load documents:', err);
-      setError('Failed to load your documents. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+      setError('Failed to load documents');
+    } finally { setLoading(false); }
   };
 
-  const toggleDocumentExpansion = (documentHash) => {
-    setExpandedDocuments(prev => ({
-      ...prev,
-      [documentHash]: !prev[documentHash]
-    }));
-  };
+  const filteredDocs = documents.filter(d =>
+    d.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    d.documentHash.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const selectDocumentForManagement = (document) => {
-    setSelectedDocument(document);
-  };
-
-  const formatDate = (date) => {
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-  };
-
-  const formatDocumentHash = (hash) => {
-    return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
-  };
-
-  const formatIPFSCID = (cid) => {
-    return `${cid.slice(0, 12)}...${cid.slice(-8)}`;
-  };
+  const formatDate = (date) => date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
 
   if (!isConnected) {
     return (
-      <div className="document-manager">
-        <div className="connect-notice">
-          <h3>🔗 Connect Your Wallet</h3>
-          <p>Connect your MetaMask wallet to view and manage your documents.</p>
-        </div>
+      <div className="text-center py-8">
+        <Users className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+        <p className="text-sm text-slate-400 font-medium">Connect your wallet</p>
+        <p className="text-xs text-slate-500 mt-1">to view and manage your documents.</p>
       </div>
     );
   }
 
   if (selectedDocument) {
     return (
-      <div className="document-manager">
-        <div className="document-manager-header">
-          <h3>🔐 Manage Access for: {selectedDocument.fileName}</h3>
-          <button 
-            className="back-button"
-            onClick={() => setSelectedDocument(null)}
-          >
-            ← Back to Documents
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setSelectedDocument(null)} className="btn-ghost p-2">
+            <ArrowLeft className="w-4 h-4" />
           </button>
+          <div>
+            <h3 className="font-display font-semibold text-white text-sm">{selectedDocument.fileName}</h3>
+            <p className="text-xs text-slate-500">{formatDate(selectedDocument.timestamp)}</p>
+          </div>
         </div>
-        
-        <div className="selected-document-info">
-          <div className="document-details">
-            <div className="detail-row">
-              <span className="label">Document Hash:</span>
-              <span className="value">{formatDocumentHash(selectedDocument.documentHash)}</span>
-            </div>
-            <div className="detail-row">
-              <span className="label">IPFS CID:</span>
-              <span className="value">{formatIPFSCID(selectedDocument.ipfsCID)}</span>
-            </div>
-            <div className="detail-row">
-              <span className="label">Uploaded:</span>
-              <span className="value">{formatDate(selectedDocument.timestamp)}</span>
-            </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Hash</p>
+            <p className="text-xs text-cyber-400 font-mono mt-0.5 truncate">{selectedDocument.documentHash}</p>
+          </div>
+          <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">IPFS CID</p>
+            <p className="text-xs text-cyber-400 font-mono mt-0.5 truncate">{selectedDocument.ipfsCID}</p>
+          </div>
+          <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Index</p>
+            <p className="text-sm text-slate-200 font-medium mt-0.5">#{selectedDocument.index}</p>
           </div>
         </div>
 
         <AccessManagement
           documentHash={selectedDocument.documentHash}
           isOwner={true}
-          onAccessGranted={(userAddress, accessLevel, expirationTime) => {
-            console.log('Access granted to:', userAddress, accessLevel, expirationTime);
-            // Optionally refresh the document list or show notification
-          }}
-          onAccessRevoked={(userAddress) => {
-            console.log('Access revoked from:', userAddress);
-            // Optionally refresh the document list or show notification
-          }}
+          onAccessGranted={(addr, level, exp) => console.log('Granted:', addr)}
+          onAccessRevoked={(addr) => console.log('Revoked:', addr)}
         />
       </div>
     );
   }
 
   return (
-    <div className="document-manager">
-      <div className="document-manager-header">
-        <h3>📚 Your Documents</h3>
-        <button 
-          className="refresh-button"
-          onClick={loadUserDocuments}
-          disabled={loading}
-        >
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-display font-semibold text-white text-sm">Your Documents</h3>
+        <button onClick={loadUserDocuments} disabled={loading} className="btn-ghost text-xs">
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
           {loading ? 'Loading...' : 'Refresh'}
         </button>
       </div>
 
+      {/* Search */}
+      {documents.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search documents..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="input-field pl-9 text-xs"
+          />
+        </div>
+      )}
+
       {error && (
-        <div className="error-message">
-          {error}
+        <div className="p-3 rounded-lg bg-rose-500/5 border border-rose-500/10">
+          <p className="text-xs text-rose-400">{error}</p>
         </div>
       )}
 
       {loading && (
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>Loading your documents...</p>
+        <div className="flex items-center gap-2 py-8 justify-center">
+          <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+          <span className="text-sm text-slate-500">Loading documents...</span>
         </div>
       )}
 
       {!loading && documents.length === 0 && (
-        <div className="no-documents">
-          <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h4>No Documents Found</h4>
-          <p>You haven't uploaded any documents yet.</p>
-          <p>Upload a document first, then return here to manage access permissions.</p>
+        <div className="text-center py-8">
+          <FileText className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+          <p className="text-sm text-slate-400 font-medium">No documents yet</p>
+          <p className="text-xs text-slate-500 mt-1">Upload a document first, then manage access here.</p>
         </div>
       )}
 
-      {!loading && documents.length > 0 && (
-        <div className="documents-list">
-          <div className="documents-header">
-            <span>Found {documents.length} document{documents.length !== 1 ? 's' : ''}</span>
-          </div>
-          
-          {documents.map((document) => (
-            <div key={document.documentHash} className="document-item">
-              <div className="document-summary">
-                <div className="document-info">
-                  <div className="document-title">
-                    <FileText className="h-5 w-5" />
-                    <span className="file-name">{document.fileName}</span>
-                  </div>
-                  <div className="document-metadata">
-                    <span className="upload-date">
-                      <Calendar className="h-4 w-4" />
-                      {formatDate(document.timestamp)}
+      {!loading && filteredDocs.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">
+            {filteredDocs.length} document{filteredDocs.length !== 1 ? 's' : ''}
+            {searchTerm && ` matching "${searchTerm}"`}
+          </p>
+
+          {filteredDocs.map((doc) => (
+            <div key={doc.documentHash} className="rounded-lg border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+              <div className="flex items-center gap-3 p-3">
+                <div className="w-9 h-9 rounded-lg bg-accent-500/10 border border-accent-500/20 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-accent-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-200 font-medium truncate">{doc.fileName}</p>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-2.5 h-2.5" /> {formatDate(doc.timestamp)}
                     </span>
-                    <span className="access-count">
-                      <Users className="h-4 w-4" />
-                      {document.metadata.accessCount} user{document.metadata.accessCount !== 1 ? 's' : ''}
+                    <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                      <Users className="w-2.5 h-2.5" /> {doc.metadata.accessCount}
                     </span>
                   </div>
                 </div>
-                
-                <div className="document-actions">
-                  <button
-                    className="manage-access-button"
-                    onClick={() => selectDocumentForManagement(document)}
-                  >
-                    <Users className="h-4 w-4" />
-                    Manage Access
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => setSelectedDocument(doc)} className="btn-ghost text-xs py-1.5 px-2.5">
+                    <Users className="w-3 h-3" /> Manage
                   </button>
                   <button
-                    className="expand-button"
-                    onClick={() => toggleDocumentExpansion(document.documentHash)}
+                    onClick={() => setExpandedDocuments(prev => ({ ...prev, [doc.documentHash]: !prev[doc.documentHash] }))}
+                    className="btn-ghost p-1.5"
                   >
-                    {expandedDocuments[document.documentHash] ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+                    {expandedDocuments[doc.documentHash] ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>
 
-              {expandedDocuments[document.documentHash] && (
-                <div className="document-details-expanded">
-                  <div className="detail-grid">
-                    <div className="detail-item">
-                      <span className="detail-label">Document Hash:</span>
-                      <span className="detail-value">
-                        <code>{document.documentHash}</code>
-                      </span>
+              {expandedDocuments[doc.documentHash] && (
+                <div className="px-3 pb-3 pt-0 border-t border-white/[0.04]">
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Document Hash</p>
+                      <p className="text-xs text-cyber-400 font-mono mt-0.5 break-all">{doc.documentHash}</p>
                     </div>
-                    <div className="detail-item">
-                      <span className="detail-label">IPFS CID:</span>
-                      <span className="detail-value">
-                        <code>{document.ipfsCID}</code>
-                      </span>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">IPFS CID</p>
+                      <p className="text-xs text-cyber-400 font-mono mt-0.5 break-all">{doc.ipfsCID}</p>
                     </div>
-                    <div className="detail-item">
-                      <span className="detail-label">Upload Time:</span>
-                      <span className="detail-value">{formatDate(document.timestamp)}</span>
-                    </div>
-                    <div className="detail-item">
-                      <span className="detail-label">Blockchain Index:</span>
-                      <span className="detail-value">#{document.index}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="quick-actions">
-                    <button
-                      className="primary-action-button"
-                      onClick={() => selectDocumentForManagement(document)}
-                    >
-                      🔐 Generate Secondary Keys
-                    </button>
                   </div>
                 </div>
               )}

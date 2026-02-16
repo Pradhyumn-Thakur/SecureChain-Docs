@@ -2,7 +2,6 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Loader2, Lock, CheckCircle, AlertCircle, Copy, Check } from 'lucide-react';
 import { useEncryption } from '../../hooks/useEncryption';
 import { AppContext } from '../../App';
-import './EncryptionModule.css';
 
 function EncryptionModule({ file, onEncrypted, encryptionKey }) {
   const { encryptFile, isEncrypting, encryptionProgress, error } = useEncryption();
@@ -13,7 +12,6 @@ function EncryptionModule({ file, onEncrypted, encryptionKey }) {
   const [hashCopied, setHashCopied] = useState(false);
 
   useEffect(() => {
-    // Reset when file changes
     if (file) {
       setEncryptionStatus('idle');
       setFileHash(null);
@@ -22,182 +20,138 @@ function EncryptionModule({ file, onEncrypted, encryptionKey }) {
     }
   }, [file]);
 
-  const copyHashToClipboard = async () => {
+  const copyHash = async () => {
     if (!fileHash) return;
-    
     try {
       await navigator.clipboard.writeText(fileHash);
       setHashCopied(true);
-      addNotification('Original file hash copied to clipboard!', 'success');
-      
-      // Reset the copied state after 2 seconds
+      addNotification('File hash copied to clipboard', 'success');
       setTimeout(() => setHashCopied(false), 2000);
-    } catch (err) {
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea');
-      textArea.value = fileHash;
-      document.body.appendChild(textArea);
-      textArea.select();
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = fileHash;
+      document.body.appendChild(ta);
+      ta.select();
       document.execCommand('copy');
-      document.body.removeChild(textArea);
-      
+      document.body.removeChild(ta);
       setHashCopied(true);
-      addNotification('Original file hash copied to clipboard!', 'success');
       setTimeout(() => setHashCopied(false), 2000);
     }
   };
 
   const handleEncrypt = async () => {
-    if (!file || !encryptionKey) {
-      alert('Please select a file and generate a key');
-      return;
-    }
-
+    if (!file || !encryptionKey) return;
     setEncryptionStatus('encrypting');
-
     try {
       const result = await encryptFile(file, encryptionKey);
-      
       setFileHash(result.originalHash);
       setEncryptionResult(result);
       setEncryptionStatus('complete');
-      
-      // Pass the encrypted data to parent component
-      if (onEncrypted) {
-        onEncrypted(result);
-      }
-
-    } catch (err) {
+      onEncrypted?.(result);
+    } catch {
       setEncryptionStatus('error');
-      console.error('Encryption failed:', err);
     }
   };
 
-  const getStatusIcon = () => {
-    switch (encryptionStatus) {
-      case 'complete':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'error':
-        return <AlertCircle className="h-5 w-5 text-red-500" />;
-      default:
-        return <Lock className="h-5 w-5 text-gray-400" />;
-    }
-  };
-
-  const getStatusMessage = () => {
-    switch (encryptionStatus) {
-      case 'idle':
-        return 'Ready to encrypt';
-      case 'encrypting':
-        return `Encrypting... ${Math.round(encryptionProgress)}%`;
-      case 'complete':
-        return 'Encryption complete!';
-      case 'error':
-        return error || 'Encryption failed';
-      default:
-        return '';
-    }
-  };
+  if (!file) {
+    return (
+      <div className="text-center py-4">
+        <Lock className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+        <p className="text-sm text-slate-500">Select a file to encrypt</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="encryption-module">
-      <div className="module-header">
-        <h3>File Encryption</h3>
-        {getStatusIcon()}
+    <div className="space-y-4">
+      {/* File info */}
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-950/60 border border-white/[0.06]">
+        <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-slate-300 truncate">{file.name}</p>
+          <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+        </div>
+        {encryptionStatus === 'complete' && <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />}
       </div>
 
-      {!file && (
-        <div className="no-file-message">
-          <Lock className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-          <p>Select a file to encrypt</p>
+      {!encryptionKey && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-accent-500/5 border border-accent-500/10">
+          <AlertCircle className="w-4 h-4 text-accent-500 shrink-0" />
+          <span className="text-xs text-accent-400">Generate or import an encryption key first</span>
         </div>
       )}
 
-      {file && (
-        <>
-          <div className="file-info">
-            <h4>File to Encrypt:</h4>
-            <p className="file-name">{file.name}</p>
-            <p className="file-size">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+      {/* File hash */}
+      {fileHash && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Original File Hash</span>
+            <button
+              onClick={copyHash}
+              className={`btn-ghost p-1.5 ${hashCopied ? 'text-emerald-400' : ''}`}
+            >
+              {hashCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
           </div>
-
-          {!encryptionKey && (
-            <div className="warning-message">
-              <AlertCircle className="h-4 w-4" />
-              <span>Generate or import an encryption key first</span>
-            </div>
-          )}
-
-          {fileHash && (
-            <div className="hash-display">
-              <h4>Original File Hash (save for retrieval):</h4>
-              <div className="hash-container">
-                <code className="hash-value">{fileHash}</code>
-                <button
-                  onClick={copyHashToClipboard}
-                  className={`copy-button ${hashCopied ? 'copied' : ''}`}
-                  title="Copy hash to clipboard"
-                >
-                  {hashCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </button>
-              </div>
-              <small className="hash-note">
-                💡 <strong>Important:</strong> Save this hash securely! You'll need it to retrieve your document later. 
-                Click the copy button to copy it to your clipboard.
-              </small>
-            </div>
-          )}
-
-          <button
-            onClick={handleEncrypt}
-            disabled={!file || !encryptionKey || isEncrypting || encryptionStatus === 'complete'}
-            className={`encrypt-button ${isEncrypting ? 'encrypting' : ''} ${encryptionStatus === 'complete' ? 'complete' : ''}`}
-          >
-            {isEncrypting ? (
-              <>
-                <Loader2 className="animate-spin h-5 w-5 mr-2" />
-                Encrypting...
-              </>
-            ) : encryptionStatus === 'complete' ? (
-              <>
-                <CheckCircle className="h-5 w-5 mr-2" />
-                Encrypted
-              </>
-            ) : (
-              <>
-                <Lock className="h-5 w-5 mr-2" />
-                Encrypt File
-              </>
-            )}
-          </button>
-
-          {isEncrypting && (
-            <div className="progress-container">
-              <div className="progress-bar">
-                <div 
-                  className="progress-fill"
-                  style={{ width: `${encryptionProgress}%` }}
-                />
-              </div>
-              <span className="progress-text">{Math.round(encryptionProgress)}%</span>
-            </div>
-          )}
-
-          {encryptionResult && (
-            <div className="encryption-result">
-              <h4>Encryption Complete</h4>
-              <div className="result-details">
-                <p><strong>Original Size:</strong> {(encryptionResult.fileSize / 1024 / 1024).toFixed(2)} MB</p>
-                <p><strong>Encrypted Size:</strong> {(encryptionResult.encryptedSize / 1024 / 1024).toFixed(2)} MB</p>
-                <p><strong>Ready for:</strong> IPFS Upload</p>
-              </div>
-            </div>
-          )}
-
-          <div className="status-message">
-            {getStatusMessage()}
+          <div className="px-3 py-2.5 rounded-lg bg-surface-950/80 border border-white/[0.06]">
+            <code className="text-xs text-cyber-400 font-mono break-all">{fileHash}</code>
           </div>
-        </>
+          <p className="text-[10px] text-slate-500">
+            Save this hash securely — you'll need it to retrieve your document later.
+          </p>
+        </div>
+      )}
+
+      {/* Encrypt button */}
+      <button
+        onClick={handleEncrypt}
+        disabled={!file || !encryptionKey || isEncrypting || encryptionStatus === 'complete'}
+        className={`w-full ${encryptionStatus === 'complete' ? 'btn-success' : 'btn-primary'}`}
+      >
+        {isEncrypting ? (
+          <><Loader2 className="w-4 h-4 animate-spin" /> Encrypting...</>
+        ) : encryptionStatus === 'complete' ? (
+          <><CheckCircle className="w-4 h-4" /> Encrypted</>
+        ) : (
+          <><Lock className="w-4 h-4" /> Encrypt File</>
+        )}
+      </button>
+
+      {/* Progress bar */}
+      {isEncrypting && (
+        <div className="space-y-1.5">
+          <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-accent-500 to-accent-400 transition-all duration-300"
+              style={{ width: `${encryptionProgress}%` }}
+            />
+          </div>
+          <p className="text-xs text-slate-500 text-right">{Math.round(encryptionProgress)}%</p>
+        </div>
+      )}
+
+      {/* Result */}
+      {encryptionResult && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] text-center">
+            <p className="text-xs text-slate-500">Original</p>
+            <p className="text-sm font-medium text-slate-200">{(encryptionResult.fileSize / 1024 / 1024).toFixed(2)} MB</p>
+          </div>
+          <div className="p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] text-center">
+            <p className="text-xs text-slate-500">Encrypted</p>
+            <p className="text-sm font-medium text-slate-200">{(encryptionResult.encryptedSize / 1024 / 1024).toFixed(2)} MB</p>
+          </div>
+          <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 text-center">
+            <p className="text-xs text-slate-500">Status</p>
+            <p className="text-sm font-medium text-emerald-400">Ready</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="text-xs text-rose-400 flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5" /> {error}
+        </p>
       )}
     </div>
   );
