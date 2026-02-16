@@ -11,6 +11,25 @@
       {
         "indexed": true,
         "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "AccessExpired",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "documentHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "owner",
         "type": "address"
       },
@@ -19,6 +38,18 @@
         "internalType": "address",
         "name": "grantedTo",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum DocumentRegistry.AccessLevel",
+        "name": "level",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "expirationTime",
+        "type": "uint256"
       }
     ],
     "name": "AccessGranted",
@@ -84,6 +115,24 @@
     "inputs": [
       {
         "internalType": "bytes32",
+        "name": "_documentHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "cleanupExpiredAccess",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
       }
@@ -143,6 +192,25 @@
         "internalType": "string",
         "name": "fileName",
         "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_documentHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getDocumentAccessList",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
       }
     ],
     "stateMutability": "view",
@@ -219,6 +287,50 @@
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "_documentHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserAccess",
+    "outputs": [
+      {
+        "internalType": "enum DocumentRegistry.AccessLevel",
+        "name": "level",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "expirationTime",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "grantedAt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "isExpired",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "_user",
         "type": "address"
@@ -265,6 +377,16 @@
         "internalType": "address",
         "name": "_user",
         "type": "address"
+      },
+      {
+        "internalType": "enum DocumentRegistry.AccessLevel",
+        "name": "_level",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationTime",
+        "type": "uint256"
       }
     ],
     "name": "grantAccess",

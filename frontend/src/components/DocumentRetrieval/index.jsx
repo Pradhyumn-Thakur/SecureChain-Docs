@@ -1,11 +1,12 @@
 import React, { useState, useContext } from 'react';
-import { Download, Search, Key, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, Search, Key, FileText, AlertCircle, Loader2, Eye } from 'lucide-react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../../contexts/Web3Context';
 import { useEncryption } from '../../hooks/useEncryption';
 import { AppContext } from '../../App';
 import ipfsService from '../../utils/ipfs';
 import CryptoUtils from '../../utils/crypto';
+import DocumentViewer from '../DocumentViewer';
 import './DocumentRetrieval.css';
 
 const DocumentRetrieval = () => {
@@ -19,6 +20,8 @@ const DocumentRetrieval = () => {
   const [error, setError] = useState('');
   const [retrievedDocument, setRetrievedDocument] = useState(null);
   const [progress, setProgress] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [accessLevel, setAccessLevel] = useState('full_access');
 
   const handleRetrieve = async () => {
     if (!contract || !account) {
@@ -41,9 +44,12 @@ const DocumentRetrieval = () => {
       return;
     }
 
+    // Clear all previous state before starting
     setIsRetrieving(true);
     setError('');
     setRetrievedDocument(null);
+    setProgress('');
+    setShowPreview(false);
 
     try {
       // Step 1: Create user-scoped hash and verify document exists
@@ -87,9 +93,9 @@ const DocumentRetrieval = () => {
       }
 
       // Prepare encrypted data structure for decryption
+      // Note: IV is embedded in the encrypted data, not stored separately
       const encryptedDataForDecrypt = {
         encryptedData: ipfsResult.data,
-        iv: ipfsResult.metadata.keyvalues?.iv || ipfsResult.metadata.iv,
         originalHash: documentDetails.documentHash,
         fileName: documentDetails.fileName
       };
@@ -108,9 +114,17 @@ const DocumentRetrieval = () => {
 
     } catch (err) {
       console.error('Document retrieval error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        stack: err.stack,
+        documentHash,
+        account,
+        timestamp: new Date().toISOString()
+      });
+      
       const errorMessage = err.message || 'Failed to retrieve document';
-      setError(errorMessage);
-      addNotification(errorMessage, 'error');
+      setError(`Retrieval failed: ${errorMessage}`);
+      addNotification(`Retrieval failed: ${errorMessage}`, 'error');
       setProgress('');
     } finally {
       setIsRetrieving(false);
@@ -142,6 +156,12 @@ const DocumentRetrieval = () => {
     setError('');
     setRetrievedDocument(null);
     setProgress('');
+    setShowPreview(false);
+    
+    // Force browser to clear any cached data
+    if (typeof window !== 'undefined' && window.gc) {
+      window.gc(); // Garbage collection if available in dev mode
+    }
   };
 
   return (
@@ -266,16 +286,50 @@ const DocumentRetrieval = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleDownload}
-                className="download-button"
-              >
-                <Download className="h-5 w-5" />
-                Download File
-              </button>
+              <div className="document-actions">
+                <button
+                  onClick={() => {
+                    console.log('Preview button clicked, setting showPreview to true');
+                    console.log('Retrieved document data:', {
+                      hasDecryptedData: !!retrievedDocument?.decryptedData,
+                      fileName: retrievedDocument?.fileName,
+                      dataType: typeof retrievedDocument?.decryptedData,
+                      dataLength: retrievedDocument?.decryptedData?.length
+                    });
+                    setShowPreview(true);
+                  }}
+                  className="preview-button"
+                >
+                  <Eye className="h-5 w-5" />
+                  Preview Document
+                </button>
+                
+                <button
+                  onClick={handleDownload}
+                  className="download-button"
+                >
+                  <Download className="h-5 w-5" />
+                  Download File
+                </button>
+              </div>
             </div>
           )}
         </div>
+      )}
+      
+      {/* Document Preview Modal */}
+      {console.log('Modal render check:', { showPreview, hasRetrievedDocument: !!retrievedDocument })}
+      {showPreview && retrievedDocument && (
+        <DocumentViewer
+          documentData={retrievedDocument.decryptedData}
+          fileName={retrievedDocument.fileName}
+          accessLevel={accessLevel}
+          allowDownload={accessLevel !== 'view_only'}
+          onClose={() => {
+            console.log('Closing preview modal');
+            setShowPreview(false);
+          }}
+        />
       )}
     </div>
   );

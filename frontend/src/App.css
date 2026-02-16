@@ -480,3 +480,111 @@ input:focus, textarea:focus, select:focus {
   transform: translateY(-1px);
   box-shadow: 0 4px 20px rgba(102, 126, 234, 0.2) !important;
 }
+
+/* Access Management Container */
+.access-management-container {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.access-management-header {
+  text-align: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.access-management-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.access-management-header p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 16px;
+}
+
+.current-document-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 24px;
+  border: 1px solid #e9ecef;
+}
+
+.current-document-section h4 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 8px;
+}
+
+.current-doc-info {
+  background: white;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  margin-bottom: 24px;
+}
+
+.current-doc-info p {
+  margin: 0 0 8px 0;
+  color: #495057;
+}
+
+.current-doc-info p:last-child {
+  margin-bottom: 0;
+}
+
+.current-doc-info code {
+  background: #e9ecef;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  color: #e83e8c;
+}
+
+.previous-documents-section {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  border: 1px solid #e9ecef;
+}
+
+.previous-documents-section h4 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-bottom: 2px solid #28a745;
+  padding-bottom: 8px;
+}
+
+.previous-documents-section p {
+  margin: 0 0 24px 0;
+  color: #6c757d;
+  font-size: 16px;
+}
+
+/* Mobile responsiveness for access management */
+@media (max-width: 768px) {
+  .access-management-container {
+    gap: 24px;
+  }
+
+  .access-management-header {
+    padding: 20px;
+  }
+
+  .current-document-section,
+  .previous-documents-section {
+    padding: 20px;
+  }
+}

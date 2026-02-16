@@ -49,9 +49,9 @@ function KeyManagement({ onKeyGenerated }) {
   const loadStoredKey = async () => {
     try {
       // Try to load the most recent key
-      const key = await CryptoUtils.getKeyFromDB('current');
-      if (key) {
-        setEncryptionKey(key);
+      const keyData = await CryptoUtils.getKeyFromDB('current');
+      if (keyData && keyData.key) {
+        setEncryptionKey(keyData.key);
       }
     } catch (err) {
       // No stored key, that's okay
@@ -67,12 +67,19 @@ function KeyManagement({ onKeyGenerated }) {
       const key = await CryptoUtils.generateKey();
       setEncryptionKey(key);
       
-      // Store as current key
-      await CryptoUtils.storeKeyInDB('current', key);
+      // Store as current key with basic metadata
+      const metadata = {
+        accessLevel: 'owner',
+        userId: 'current_user',
+        expirationTime: 0,
+        createdAt: Date.now()
+      };
+      
+      await CryptoUtils.storeKeyInDB('current', key, metadata);
       
       // Also store with timestamp for history
       const keyId = `key_${Date.now()}`;
-      await CryptoUtils.storeKeyInDB(keyId, key);
+      await CryptoUtils.storeKeyInDB(keyId, key, metadata);
       
       addNotification('Encryption key generated successfully', 'success');
       
@@ -117,8 +124,15 @@ function KeyManagement({ onKeyGenerated }) {
       const key = await CryptoUtils.importKey(hexKey.trim());
       setEncryptionKey(key);
       
-      // Store as current key
-      await CryptoUtils.storeKeyInDB('current', key);
+      // Store as current key with basic metadata
+      const metadata = {
+        accessLevel: 'owner',
+        userId: 'current_user',
+        expirationTime: 0,
+        createdAt: Date.now()
+      };
+      
+      await CryptoUtils.storeKeyInDB('current', key, metadata);
       
       // Reset file input
       event.target.value = '';
@@ -248,7 +262,7 @@ function KeyManagement({ onKeyGenerated }) {
                 style={{ display: 'none' }}
               />
             </label>
-          </div>
+          </div>add
 
           {importError && (
             <div className="error-message">

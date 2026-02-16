@@ -2,13 +2,30 @@
 pragma solidity ^0.8.19;
 
 contract DocumentRegistry {
+    // Access level enumeration
+    enum AccessLevel {
+        NONE,
+        VIEW_ONLY,
+        FULL_ACCESS,
+        OWNER
+    }
+    
+    // Access grant structure with time-based expiration
+    struct AccessGrant {
+        AccessLevel level;
+        uint256 expirationTime; // 0 for permanent access
+        uint256 grantedAt;
+        bool isActive;
+    }
+    
     // Document structure
     struct Document {
         string ipfsCID;
         address owner;
         uint256 timestamp;
         string fileName;
-        mapping(address => bool) authorizedUsers;
+        mapping(address => AccessGrant) userAccess;
+        address[] accessList; // Track all users with any access
     }
     
     // Main storage: document hash => Document
@@ -28,13 +45,20 @@ contract DocumentRegistry {
     event AccessGranted(
         bytes32 indexed documentHash,
         address indexed owner,
-        address indexed grantedTo
+        address indexed grantedTo,
+        AccessLevel level,
+        uint256 expirationTime
     );
     
     event AccessRevoked(
         bytes32 indexed documentHash,
         address indexed owner,
         address indexed revokedFrom
+    );
+    
+    event AccessExpired(
+        bytes32 indexed documentHash,
+        address indexed user
     );
     
     // Store a new document or update existing one (for privacy-focused user-scoped hashes)
@@ -52,7 +76,13 @@ contract DocumentRegistry {
         if (isNewDocument) {
             // New document
             doc.owner = msg.sender;
-            doc.authorizedUsers[msg.sender] = true;
+            doc.userAccess[msg.sender] = AccessGrant({
+                level: AccessLevel.OWNER,
+                expirationTime: 0, // Permanent for owner
+                grantedAt: block.timestamp,
+                isActive: true
+            });
+            doc.accessList.push(msg.sender);
             userDocuments[msg.sender].push(_documentHash);
         } else {
             // Existing document - only owner can update
@@ -67,7 +97,7 @@ contract DocumentRegistry {
         emit DocumentStored(_documentHash, msg.sender, _ipfsCID, block.timestamp);
     }
     
-    // Get document details
+    // Get document details with access level validation
     function getDocument(bytes32 _documentHash) public view returns (
         string memory ipfsCID,
         address owner,
@@ -76,10 +106,9 @@ contract DocumentRegistry {
     ) {
         Document storage doc = documents[_documentHash];
         require(doc.timestamp != 0, "Document not found");
-        require(
-            doc.authorizedUsers[msg.sender] || doc.owner == msg.sender,
-            "Access denied"
-        );
+        
+        AccessGrant storage access = doc.userAccess[msg.sender];
+        require(_hasValidAccess(access), "Access denied or expired");
         
         return (doc.ipfsCID, doc.owner, doc.timestamp, doc.fileName);
     }
@@ -101,16 +130,43 @@ contract DocumentRegistry {
         return documents[_documentHash].timestamp != 0;
     }
     
-    // Grant access to another user
-    function grantAccess(bytes32 _documentHash, address _user) public {
+    // Grant access to another user with specific level and expiration
+    function grantAccess(
+        bytes32 _documentHash, 
+        address _user, 
+        AccessLevel _level, 
+        uint256 _expirationTime
+    ) public {
         Document storage doc = documents[_documentHash];
         require(doc.owner == msg.sender, "Only owner can grant access");
         require(doc.timestamp != 0, "Document not found");
         require(_user != address(0), "Invalid user address");
-        require(!doc.authorizedUsers[_user], "Access already granted");
+        require(_user != msg.sender, "Cannot grant access to self");
+        require(_level != AccessLevel.OWNER, "Cannot grant owner level");
+        require(_level != AccessLevel.NONE, "Invalid access level");
         
-        doc.authorizedUsers[_user] = true;
-        emit AccessGranted(_documentHash, msg.sender, _user);
+        // Check if expiration time is valid (0 for permanent, or future time)
+        if (_expirationTime != 0) {
+            require(_expirationTime > block.timestamp, "Expiration time must be in future");
+        }
+        
+        AccessGrant storage existingAccess = doc.userAccess[_user];
+        bool hadAccess = existingAccess.isActive;
+        
+        // Update or create access grant
+        doc.userAccess[_user] = AccessGrant({
+            level: _level,
+            expirationTime: _expirationTime,
+            grantedAt: block.timestamp,
+            isActive: true
+        });
+        
+        // Add to access list if new user
+        if (!hadAccess) {
+            doc.accessList.push(_user);
+        }
+        
+        emit AccessGranted(_documentHash, msg.sender, _user, _level, _expirationTime);
     }
     
     // Revoke access from a user
@@ -118,17 +174,71 @@ contract DocumentRegistry {
         Document storage doc = documents[_documentHash];
         require(doc.owner == msg.sender, "Only owner can revoke access");
         require(doc.timestamp != 0, "Document not found");
-        require(doc.authorizedUsers[_user], "Access not granted");
         require(_user != msg.sender, "Cannot revoke own access");
         
-        doc.authorizedUsers[_user] = false;
+        AccessGrant storage access = doc.userAccess[_user];
+        require(access.isActive, "Access not granted or already revoked");
+        
+        access.isActive = false;
         emit AccessRevoked(_documentHash, msg.sender, _user);
     }
     
-    // Check if user has access
+    // Check if user has valid access
     function hasAccess(bytes32 _documentHash, address _user) public view returns (bool) {
         Document storage doc = documents[_documentHash];
-        return doc.authorizedUsers[_user];
+        AccessGrant storage access = doc.userAccess[_user];
+        return _hasValidAccess(access);
+    }
+    
+    // Get user's access level and expiration info
+    function getUserAccess(bytes32 _documentHash, address _user) public view returns (
+        AccessLevel level,
+        uint256 expirationTime,
+        uint256 grantedAt,
+        bool isActive,
+        bool isExpired
+    ) {
+        Document storage doc = documents[_documentHash];
+        AccessGrant storage access = doc.userAccess[_user];
+        
+        bool expired = access.expirationTime != 0 && block.timestamp > access.expirationTime;
+        
+        return (
+            access.level,
+            access.expirationTime,
+            access.grantedAt,
+            access.isActive,
+            expired
+        );
+    }
+    
+    // Get all users with access to a document (owner only)
+    function getDocumentAccessList(bytes32 _documentHash) public view returns (address[] memory) {
+        Document storage doc = documents[_documentHash];
+        require(doc.owner == msg.sender, "Only owner can view access list");
+        return doc.accessList;
+    }
+    
+    // Cleanup expired access (anyone can call to help maintain blockchain state)
+    function cleanupExpiredAccess(bytes32 _documentHash, address _user) public {
+        Document storage doc = documents[_documentHash];
+        require(doc.timestamp != 0, "Document not found");
+        
+        AccessGrant storage access = doc.userAccess[_user];
+        require(access.isActive, "Access already inactive");
+        require(access.expirationTime != 0, "Access is permanent");
+        require(block.timestamp > access.expirationTime, "Access not yet expired");
+        
+        access.isActive = false;
+        emit AccessExpired(_documentHash, _user);
+    }
+    
+    // Internal function to validate access
+    function _hasValidAccess(AccessGrant storage access) internal view returns (bool) {
+        if (!access.isActive) return false;
+        if (access.level == AccessLevel.NONE) return false;
+        if (access.expirationTime != 0 && block.timestamp > access.expirationTime) return false;
+        return true;
     }
     
     // Get user's documents

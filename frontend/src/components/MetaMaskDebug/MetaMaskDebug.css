@@ -1,0 +1,238 @@
+.metamask-debug {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.debug-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #e1e5e9;
+  padding-bottom: 16px;
+}
+
+.debug-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.refresh-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.refresh-btn:hover {
+  background: #0056b3;
+}
+
+.debug-sections {
+  display: grid;
+  gap: 24px;
+}
+
+.debug-section {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.debug-section h4 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.debug-info {
+  display: grid;
+  gap: 12px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.label {
+  font-weight: 500;
+  color: #495057;
+}
+
+.success {
+  color: #28a745;
+  font-weight: 500;
+}
+
+.error {
+  color: #dc3545;
+  font-weight: 500;
+}
+
+.warning {
+  color: #ffc107;
+  font-weight: 500;
+}
+
+.address {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.test-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.test-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.test-btn:hover {
+  background: #218838;
+}
+
+.test-result {
+  background: white;
+  padding: 16px;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+  margin-top: 16px;
+}
+
+.test-result h5 {
+  margin: 0 0 8px 0;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.test-result pre {
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #495057;
+  background: #f8f9fa;
+  padding: 8px;
+  border-radius: 3px;
+}
+
+.accounts-list {
+  display: grid;
+  gap: 8px;
+}
+
+.account-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.account-index {
+  background: #007bff;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 24px;
+  text-align: center;
+}
+
+.account-address {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  word-break: break-all;
+  color: #495057;
+}
+
+.error-section {
+  background: #f8d7da;
+  border-color: #f5c6cb;
+}
+
+.error-text {
+  color: #721c24;
+  background: #f5c6cb;
+}
+
+.debug-tips {
+  background: #d4edda;
+  padding: 20px;
+  border-radius: 6px;
+  border: 1px solid #c3e6cb;
+  margin-top: 24px;
+}
+
+.debug-tips h4 {
+  margin: 0 0 16px 0;
+  color: #155724;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.debug-tips ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #155724;
+}
+
+.debug-tips li {
+  margin-bottom: 8px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .metamask-debug {
+    padding: 16px;
+  }
+  
+  .debug-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .test-buttons {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

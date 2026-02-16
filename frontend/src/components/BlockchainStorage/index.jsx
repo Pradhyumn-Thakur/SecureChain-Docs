@@ -76,30 +76,43 @@ const BlockchainStorage = ({ encryptedData }) => {
         ethers.solidityPacked(['address', 'bytes32'], [account, originalFileHash])
       );
 
-      const userAlreadyUploaded = await contract.verifyDocument(userScopedHash);
+      let userAlreadyUploaded = false;
+      try {
+        userAlreadyUploaded = await contract.verifyDocument(userScopedHash);
+      } catch (verifyError) {
+        // If verifyDocument fails (likely because document doesn't exist), treat as not uploaded
+        console.log('Document not found (expected for first upload):', verifyError.message);
+        userAlreadyUploaded = false;
+      }
 
       if (userAlreadyUploaded) {
         // User already uploaded this file - ask if they want to reupload
-        const existingDoc = await contract.getDocument(userScopedHash);
-        const uploadDate = new Date(Number(existingDoc.timestamp) * 1000).toLocaleDateString();
-        
-        const shouldReupload = window.confirm(
-          `You already uploaded this file on ${uploadDate}.\n\n` +
-          `Current IPFS CID: ${existingDoc.ipfsCID}\n\n` +
-          `Do you want to reupload it? This will:\n` +
-          `• Create a new IPFS entry\n` +
-          `• Update your blockchain record\n` +
-          `• Cost additional gas fees\n\n` +
-          `Click OK to proceed or Cancel to skip.`
-        );
+        try {
+          const existingDoc = await contract.getDocument(userScopedHash);
+          const uploadDate = new Date(Number(existingDoc.timestamp) * 1000).toLocaleDateString();
+          
+          const shouldReupload = window.confirm(
+            `You already uploaded this file on ${uploadDate}.\n\n` +
+            `Current IPFS CID: ${existingDoc.ipfsCID}\n\n` +
+            `Do you want to reupload it? This will:\n` +
+            `• Create a new IPFS entry\n` +
+            `• Update your blockchain record\n` +
+            `• Cost additional gas fees\n\n` +
+            `Click OK to proceed or Cancel to skip.`
+          );
 
-        if (!shouldReupload) {
-          addNotification('Upload cancelled by user', 'info');
-          setProgress('');
-          return;
+          if (!shouldReupload) {
+            addNotification('Upload cancelled by user', 'info');
+            setProgress('');
+            return;
+          }
+          
+          addNotification('Proceeding with reupload...', 'info', 2000);
+        } catch (getDocError) {
+          // If getDocument fails, proceed with upload as if it's a new document
+          console.warn('Could not retrieve existing document details:', getDocError.message);
+          addNotification('Proceeding with upload...', 'info', 2000);
         }
-        
-        addNotification('Proceeding with reupload...', 'info', 2000);
       }
 
       // Step 2: Upload encrypted file to IPFS

@@ -24,10 +24,9 @@ const NETWORKS = {
   }
 };
 
-// Helper function to validate Ethereum address
-const isValidAddress = (address) => /^0x[a-fA-F0-9]{40}$/.test(address);
-
 export const Web3Provider = ({ children }) => {
+  // Helper function to validate Ethereum address
+  const isValidAddress = useCallback((address) => /^0x[a-fA-F0-9]{40}$/.test(address), []);
   // State management
   const [account, setAccount] = useState(null);
   const [provider, setProvider] = useState(null);
@@ -83,7 +82,7 @@ export const Web3Provider = ({ children }) => {
   const getAccounts = useCallback(async (manualAddress = null) => {
     if (manualAddress) {
       if (!isValidAddress(manualAddress)) {
-        throw new Error('Invalid Ethereum address format');
+        throw new Error('Invalid MetaMask wallet address format');
       }
       
       // Verify address exists in MetaMask (optional)
@@ -274,7 +273,8 @@ export const Web3Provider = ({ children }) => {
     
     // Utilities
     formatAddress,
-    getNetworkName
+    getNetworkName,
+    isValidAddress
   };
 
   return (

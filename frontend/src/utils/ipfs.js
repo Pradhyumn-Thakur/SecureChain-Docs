@@ -76,14 +76,11 @@ class IPFSService {
       // Add file to FormData
       formData.append('file', blob, `encrypted_${encryptedData.fileName}`);
       
-      // Prepare metadata
+      // Prepare metadata (keep minimal to stay under Pinata's 10-key limit)
+      // Note: IV is already embedded in encrypted data, no need to store separately
       const fileMetadata = {
-        originalFileName: encryptedData.fileName,
         originalHash: encryptedData.originalHash,
-        encryptedSize: encryptedData.encryptedSize.toString(),
-        iv: encryptedData.iv,
-        uploadedAt: new Date().toISOString(),
-        ...metadata
+        algorithm: metadata.algorithm || 'AES-256-GCM'
       };
       
       formData.append('metadata', JSON.stringify(fileMetadata));
@@ -124,6 +121,9 @@ class IPFSService {
     if (!this.isInitialized()) {
       throw new Error('IPFS service not initialized. Please authenticate first.');
     }
+
+    console.log(`IPFS service: Attempting to retrieve CID: ${cid}`);
+    console.log(`Request URL: ${this.apiBaseUrl}/ipfs/retrieve/${cid}`);
 
     try {
       const response = await fetch(`${this.apiBaseUrl}/ipfs/retrieve/${cid}`, {

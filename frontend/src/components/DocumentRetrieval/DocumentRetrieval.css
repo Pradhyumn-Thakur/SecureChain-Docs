@@ -216,31 +216,65 @@
   font-size: 12px;
 }
 
+/* Document Actions */
+.document-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.preview-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 140px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+}
+
 .download-button {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100%;
-  padding: 1rem 2rem;
-  background: linear-gradient(135deg, #ffffff, #f8fafc);
-  color: #0f172a;
-  border: 3px solid #0f172a;
+  flex: 1;
+  min-width: 140px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
   border-radius: 8px;
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .download-button:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.4);
-  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
-  border-color: #020617;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(16, 185, 129, 0.4);
+  background: linear-gradient(135deg, #059669, #047857);
 }
 
 @media (max-width: 640px) {
@@ -255,6 +289,16 @@
   
   .retrieve-button {
     flex: none;
+  }
+  
+  .document-actions {
+    flex-direction: column;
+  }
+  
+  .preview-button,
+  .download-button {
+    flex: none;
+    min-width: auto;
   }
   
   .document-details {

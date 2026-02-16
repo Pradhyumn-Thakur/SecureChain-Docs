@@ -94,7 +94,7 @@ const WalletConnect = () => {
                   </div>
                   {manualAddress && !isValidAddress(manualAddress) && (
                     <div className="validation-error">
-                      Please enter a valid Ethereum address
+                      Please enter a valid MetaMask wallet address
                     </div>
                   )}
                 </div>

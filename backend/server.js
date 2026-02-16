@@ -134,14 +134,14 @@ app.get('/api/ipfs/test', verifySignedJWT, async (req, res) => {
   }
 });
 
-// Upload encrypted file to IPFS
+// Upload encrypted file to IPFS with access control metadata
 app.post('/api/ipfs/upload', verifySignedJWT, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });
     }
 
-    const { metadata } = req.body;
+    const { metadata, accessLevel, ownerAddress } = req.body;
     let parsedMetadata = {};
     
     if (metadata) {
@@ -152,14 +152,24 @@ app.post('/api/ipfs/upload', verifySignedJWT, upload.single('file'), async (req,
       }
     }
 
-    // Prepare metadata for Pinata
+    // Validate access level if provided
+    const validAccessLevels = ['owner', 'full_access', 'view_only'];
+    if (accessLevel && !validAccessLevels.includes(accessLevel)) {
+      return res.status(400).json({ error: 'Invalid access level' });
+    }
+
+    // Prepare metadata for Pinata with access control info (max 10 key-value pairs)
     const pinataMetadata = {
       name: `Encrypted: ${req.file.originalname}`,
       keyvalues: {
-        originalFileName: req.file.originalname,
+        fileName: req.file.originalname,
         uploadedAt: new Date().toISOString(),
         fileSize: req.file.size.toString(),
-        ...parsedMetadata
+        accessLevel: accessLevel || 'full_access',
+        ownerAddress: ownerAddress || 'unknown',
+        isAccessControlled: 'true',
+        algorithm: parsedMetadata?.algorithm || 'AES-256-GCM',
+        originalHash: parsedMetadata?.originalHash || ''
       }
     };
 
@@ -202,6 +212,26 @@ app.post('/api/ipfs/upload', verifySignedJWT, upload.single('file'), async (req,
     }
 
     const response = await uploadResponse.json();
+    console.log('Pinata upload response:', {
+      IpfsHash: response.IpfsHash,
+      PinSize: response.PinSize,
+      Timestamp: response.Timestamp
+    });
+
+    // Verify the file was pinned correctly
+    const verifyUrl = `https://gateway.pinata.cloud/ipfs/${response.IpfsHash}`;
+    console.log(`Verifying upload at: ${verifyUrl}`);
+    
+    try {
+      const verifyResponse = await fetch(verifyUrl, { method: 'HEAD' });
+      if (!verifyResponse.ok) {
+        console.warn(`Upload verification failed: ${verifyResponse.status}`);
+      } else {
+        console.log('Upload verified successfully');
+      }
+    } catch (verifyError) {
+      console.warn('Upload verification error:', verifyError.message);
+    }
 
     res.json({
       success: true,
@@ -221,10 +251,11 @@ app.post('/api/ipfs/upload', verifySignedJWT, upload.single('file'), async (req,
   }
 });
 
-// Retrieve file from IPFS
+// Retrieve file from IPFS with access control validation
 app.get('/api/ipfs/retrieve/:cid', verifySignedJWT, async (req, res) => {
   try {
     const { cid } = req.params;
+    const { userAddress, accessLevel: requestedAccessLevel } = req.query;
     
     if (!cid) {
       return res.status(400).json({ error: 'CID is required' });
@@ -232,16 +263,40 @@ app.get('/api/ipfs/retrieve/:cid', verifySignedJWT, async (req, res) => {
 
     // Use Pinata gateway to get file data
     const gatewayUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-    const fileResponse = await fetch(gatewayUrl);
+    console.log(`Attempting to retrieve file from: ${gatewayUrl}`);
+    
+    let fileResponse = await fetch(gatewayUrl);
     
     if (!fileResponse.ok) {
-      return res.status(404).json({ error: 'File not found' });
+      console.error(`IPFS retrieval failed: ${fileResponse.status} - ${fileResponse.statusText}`);
+      console.error(`Gateway URL: ${gatewayUrl}`);
+      console.error(`CID: ${cid}`);
+      
+      // Try alternative gateway as fallback
+      const alternativeUrl = `https://ipfs.io/ipfs/${cid}`;
+      console.log(`Trying alternative gateway: ${alternativeUrl}`);
+      
+      const altResponse = await fetch(alternativeUrl);
+      if (!altResponse.ok) {
+        console.error(`Alternative gateway also failed: ${altResponse.status} - ${altResponse.statusText}`);
+        return res.status(404).json({ 
+          error: 'File not found',
+          details: `Primary gateway: ${fileResponse.status}, Alternative: ${altResponse.status}`,
+          cid: cid
+        });
+      }
+      
+      // Use alternative response if successful
+      fileResponse = altResponse;
+      console.log('Successfully retrieved from alternative gateway');
     }
 
     const fileData = await fileResponse.arrayBuffer();
 
-    // Get file metadata using REST API
+    // Get file metadata using REST API and validate access
     let metadata = {};
+    let accessControlInfo = {};
+    
     try {
       const metadataResponse = await fetch(`https://api.pinata.cloud/data/pinList?hashContains=${cid}&status=pinned&pageLimit=1`, {
         headers: {
@@ -253,16 +308,49 @@ app.get('/api/ipfs/retrieve/:cid', verifySignedJWT, async (req, res) => {
         const metadataResult = await metadataResponse.json();
         if (metadataResult.rows && metadataResult.rows.length > 0) {
           metadata = metadataResult.rows[0].metadata || {};
+          
+          // Extract access control information
+          if (metadata.keyvalues) {
+            accessControlInfo = {
+              accessLevel: metadata.keyvalues.accessLevel,
+              ownerAddress: metadata.keyvalues.ownerAddress,
+              isAccessControlled: metadata.keyvalues.isAccessControlled === 'true'
+            };
+          }
         }
       }
     } catch (metaError) {
       console.warn('Could not retrieve metadata:', metaError);
     }
 
+    // Validate access if access control is enabled
+    if (accessControlInfo.isAccessControlled && userAddress) {
+      // Check if user has appropriate access level
+      const fileAccessLevel = accessControlInfo.accessLevel || 'full_access';
+      const isOwner = userAddress.toLowerCase() === (accessControlInfo.ownerAddress || '').toLowerCase();
+      
+      // Owner always has access
+      if (!isOwner) {
+        // For non-owners, validate requested access level
+        if (requestedAccessLevel === 'view_only' && fileAccessLevel === 'view_only') {
+          // Allow view-only access to view-only files
+        } else if (requestedAccessLevel === 'full_access' && fileAccessLevel !== 'view_only') {
+          // Allow full access to full-access files
+        } else {
+          return res.status(403).json({ 
+            error: 'Insufficient access level for this document',
+            requiredLevel: fileAccessLevel,
+            userLevel: requestedAccessLevel
+          });
+        }
+      }
+    }
+
     res.json({
       success: true,
       data: Buffer.from(fileData).toString('base64'), // Convert to base64 for JSON transport
       metadata: metadata,
+      accessControl: accessControlInfo,
       cid: cid
     });
 
@@ -303,6 +391,81 @@ app.get('/api/ipfs/files', verifySignedJWT, async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: `Failed to list files: ${error.message}` 
+    });
+  }
+});
+
+// Validate user access to specific document
+app.post('/api/access/validate', verifySignedJWT, async (req, res) => {
+  try {
+    const { documentHash, userAddress, accessLevel } = req.body;
+    
+    if (!documentHash || !userAddress || !accessLevel) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: documentHash, userAddress, accessLevel' 
+      });
+    }
+    
+    // For now, return validation result
+    // In production, this would integrate with blockchain contract validation
+    res.json({
+      success: true,
+      isValid: true,
+      accessLevel: accessLevel,
+      expirationTime: null,
+      message: 'Access validation successful'
+    });
+    
+  } catch (error) {
+    console.error('Access validation failed:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: `Failed to validate access: ${error.message}` 
+    });
+  }
+});
+
+// Generate time-limited access token for specific document
+app.post('/api/access/token', verifySignedJWT, async (req, res) => {
+  try {
+    const { documentHash, userAddress, accessLevel, expirationTime } = req.body;
+    
+    if (!documentHash || !userAddress || !accessLevel) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: documentHash, userAddress, accessLevel' 
+      });
+    }
+    
+    // Calculate expiration (default 1 hour if not specified)
+    const expiry = expirationTime || (Math.floor(Date.now() / 1000) + 3600);
+    
+    // Generate time-limited access token
+    const accessToken = jwt.sign(
+      {
+        documentHash,
+        userAddress,
+        accessLevel,
+        exp: expiry,
+        iat: Math.floor(Date.now() / 1000),
+        type: 'document-access'
+      },
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256' }
+    );
+    
+    res.json({
+      success: true,
+      accessToken,
+      expiresAt: expiry,
+      accessLevel,
+      documentHash
+    });
+    
+  } catch (error) {
+    console.error('Access token generation failed:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: `Failed to generate access token: ${error.message}` 
     });
   }
 });

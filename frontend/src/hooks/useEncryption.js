@@ -62,16 +62,33 @@ export const useEncryption = () => {
 
   const decryptFile = useCallback(async (encryptedData, key) => {
     try {
-      // Convert base64 data back to buffer if needed
+      console.log('Decryption input:', {
+        dataType: typeof encryptedData.encryptedData,
+        dataLength: encryptedData.encryptedData?.length,
+        hasIV: !!encryptedData.iv,
+        ivLength: encryptedData.iv?.length
+      });
+
+      // Convert base64 data back to buffer
       let dataBuffer;
       if (typeof encryptedData.encryptedData === 'string') {
-        // Base64 string from IPFS
-        dataBuffer = Uint8Array.from(atob(encryptedData.encryptedData), c => c.charCodeAt(0));
+        // Base64 string from IPFS - convert to binary
+        const binaryString = atob(encryptedData.encryptedData);
+        dataBuffer = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          dataBuffer[i] = binaryString.charCodeAt(i);
+        }
       } else {
-        dataBuffer = encryptedData.encryptedData;
+        dataBuffer = new Uint8Array(encryptedData.encryptedData);
       }
 
-      // Decrypt the data
+      console.log('Converted data buffer length:', dataBuffer.length);
+
+      // The IV is already embedded in the encrypted data by CryptoUtils.encrypt()
+      // No need to reconstruct - just use the data as-is
+      console.log('Using encrypted data as-is (IV already embedded)');
+
+      // Decrypt the data - IV is already embedded at the beginning
       const decryptedBuffer = await CryptoUtils.decrypt(dataBuffer.buffer, key);
       
       return {
@@ -80,6 +97,7 @@ export const useEncryption = () => {
         originalHash: encryptedData.originalHash
       };
     } catch (err) {
+      console.error('Decryption error details:', err);
       setError(err.message);
       throw new Error('Failed to decrypt file: ' + err.message);
     }
