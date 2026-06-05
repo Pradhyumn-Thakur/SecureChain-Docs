@@ -313,4 +313,4 @@ SecureChainDocs/
 
 ## License
 
-ISC
+Copyright (c) 2026 Pradhyumn Thakur. All rights reserved.
