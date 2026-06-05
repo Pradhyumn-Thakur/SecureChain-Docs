@@ -63,8 +63,8 @@ Note: These instructions are for macOS and Linux terminals.
 1. Clone the repository.
 
    ```bash
-   git clone https://github.com/pradhyumnsinghthakur/BlockchainDocumentStorage.git
-   cd BlockchainDocumentStorage
+   git clone https://github.com/Pradhyumn-Thakur/SecureChain-Docs.git
+   cd SecureChain-Docs
    ```
 
 2. Install root dependencies (Hardhat toolchain).
