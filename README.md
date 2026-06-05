@@ -1,85 +1,136 @@
-# Blockchain Document Storage
+# SecureChain Docs
 
-Decentralized document vault that encrypts files in your browser, stores them on IPFS, and anchors tamper-proof records on Polygon.
+A decentralized document vault that encrypts files in your browser, stores them on IPFS, and anchors tamper-proof records on the Polygon blockchain.
 
-## About
+## Description
 
-Sensitive documents deserve better than a cloud folder protected by a password. This system encrypts every file client-side with AES-256-GCM before it ever leaves your device, pins the ciphertext to IPFS through a secure backend proxy, and writes the document hash to a Polygon smart contract so nobody — including us — can alter or deny its existence.
+SecureChain Docs is a full-stack web application for secure, private document storage. Every file is encrypted with AES-256-GCM directly in your browser before it leaves your device. The encrypted file is then pinned to IPFS through a secure backend proxy, and a hash of the document is written to a Solidity smart contract on Polygon Amoy. No one, including the server, can read your documents because encryption and decryption happen entirely on your machine.
 
-The result: you hold the encryption key, the network holds the data, and the blockchain holds the proof.
+The system supports granular access control. Owners can grant other wallet addresses either view-only or full access to a document, and each grant can carry an optional expiration time. All access grants and revocations are recorded on-chain so the permission history is transparent and auditable.
 
-## Features
+## Pages
 
-- **Client-side encryption** — AES-256-GCM via the Web Crypto API. Keys never leave the browser.
-- **IPFS storage** — Encrypted files pinned through Pinata for persistent, distributed availability.
-- **On-chain registry** — Document hashes, ownership, and access grants recorded on Polygon.
-- **Granular access control** — Grant view-only or full access to other wallets, with optional time-based expiration.
-- **Built-in document viewers** — Preview PDFs, Word docs, and Excel spreadsheets after decryption.
-- **Dark and light themes** — Polished UI with animated transitions, keyboard shortcuts, and responsive layout.
+### Dashboard
+
+The Dashboard is the landing page after connecting a wallet. It shows an overview of the user's uploaded documents, quick-action buttons to navigate to Upload, Retrieve, or Access, and the current IPFS connection status in the sidebar. The dashboard pulls document records from the smart contract for the connected wallet address.
+
+### Upload
+
+The Upload page walks the user through a three-step flow: select a file, generate or load an AES-256 encryption key, and submit the encrypted file to IPFS and the blockchain. The file is encrypted in 1 MB chunks using the Web Crypto API before any network request is made. After a successful upload, the page displays the IPFS CID and the on-chain document hash, both of which are needed to retrieve the file later.
+
+The encryption key is shown as a 64-character hex string. Users must export and save this key themselves. The key is optionally cached in the browser's IndexedDB for the current session, but it is never sent to the server.
+
+### Retrieve
+
+The Retrieve page lets a user download and decrypt a document they own or have been granted access to. The user provides the document hash or IPFS CID and their encryption key. The backend fetches the encrypted file from IPFS, returns it to the browser as base64, and the browser decrypts it locally. After decryption, the page opens a built-in viewer for PDFs, Word documents, and Excel spreadsheets so users can preview the file before saving it.
+
+### Access
+
+The Access page lets document owners manage who can read their files. An owner can enter a wallet address and choose to grant either view-only or full access, with an optional expiration date. Each grant is submitted as a blockchain transaction through the DocumentRegistry smart contract. The page also shows the current access list for a document and allows the owner to revoke any existing grant.
+
+Users with view-only access can preview a document through the built-in viewer but cannot download the raw file. Users with full access can both view and download.
 
 ## Architecture
 
 ```
-┌──────────────┐      ┌──────────────┐      ┌────────────┐
-│   Browser    │      │   Backend    │      │   Pinata   │
-│              │      │   (Express)  │      │   (IPFS)   │
-│  React 19    │─────▶│  JWT auth    │─────▶│  Pinning   │
-│  Web Crypto  │      │  Rate limit  │      │  service   │
-│  ethers.js   │      │  Helmet      │      └────────────┘
-│              │      └──────────────┘
-│  MetaMask    │─────▶ Polygon (Amoy) ─────▶ DocumentRegistry.sol
-└──────────────┘
+Browser (React)
+  |-- AES-256-GCM encrypt/decrypt (Web Crypto API)
+  |-- MetaMask / ethers.js  -->  Polygon Amoy
+  |                                  |
+  |                         DocumentRegistry.sol
+  |
+  |-- JWT-authenticated requests
+  v
+Express Backend
+  |-- Pinata SDK  -->  IPFS (file storage)
+  |-- JWT signing and verification
+  |-- Rate limiting, Helmet security headers
 ```
 
-Encryption and decryption happen entirely in the browser. The backend exists only to proxy IPFS uploads so your Pinata credentials stay server-side.
+The backend holds the Pinata credentials and acts as a proxy so they are never exposed to the browser. The browser first requests a short-lived JWT from the backend, then uses that token to authenticate all upload and retrieval requests.
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) v18+
+- [Node.js](https://nodejs.org/) v18 or higher
 - [MetaMask](https://metamask.io/) browser extension
-- A [Pinata](https://pinata.cloud/) account (free tier works)
-- Test MATIC from the [Polygon faucet](https://faucet.polygon.technology/) (for Amoy testnet)
+- A [Pinata](https://pinata.cloud/) account (free tier is sufficient)
+- Test MATIC from the Polygon faucet (for Amoy testnet transactions)
 
-## Quick Start
+## Instructions
 
-```bash
-# Clone
-git clone https://github.com/pradhyumnsinghthakur/BlockchainDocumentStorage.git
-cd BlockchainDocumentStorage
+Note: These instructions are for macOS and Linux terminals.
 
-# Install all dependencies
-npm install
-cd frontend && npm install && cd ..
-cd backend && npm install && cd ..
+1. Clone the repository.
 
-# Configure environment (see "Configuration" below)
+   ```bash
+   git clone https://github.com/pradhyumnsinghthakur/BlockchainDocumentStorage.git
+   cd BlockchainDocumentStorage
+   ```
 
-# Deploy the smart contract
-npx hardhat compile
-npx hardhat run scripts/deploy.js --network polygonAmoy
+2. Install root dependencies (Hardhat toolchain).
 
-# Start backend (terminal 1)
-cd backend && npm run dev
+   ```bash
+   npm install
+   ```
 
-# Start frontend (terminal 2)
-cd frontend && npm run dev
-```
+3. Install frontend dependencies.
 
-The app opens at `http://localhost:5173`. The backend API runs on `http://localhost:3001`.
+   ```bash
+   cd frontend && npm install && cd ..
+   ```
+
+4. Install backend dependencies.
+
+   ```bash
+   cd backend && npm install && cd ..
+   ```
+
+5. Configure environment variables (see the Configuration section below).
+
+6. Compile and deploy the smart contract.
+
+   ```bash
+   npx hardhat compile
+   npx hardhat run scripts/deploy.js --network polygonAmoy
+   ```
+
+   Copy the deployed contract address from the output and update `frontend/src/contracts/contract-address.json`.
+
+7. Start the backend server in a new terminal.
+
+   ```bash
+   cd backend && npm run dev
+   ```
+
+   The API runs on `http://localhost:3001`.
+
+8. Start the frontend development server in another terminal.
+
+   ```bash
+   cd frontend && npm run dev
+   ```
+
+   The app opens at `http://localhost:5173`.
+
+9. Open `http://localhost:5173` in a browser with MetaMask installed. Switch MetaMask to the Polygon Amoy network (see the MetaMask Setup section below) and connect your wallet.
+
+To stop the servers, press Ctrl+C in each terminal.
 
 ## Configuration
 
 ### Root `.env`
 
+Create a `.env` file in the project root with the following values:
+
 ```env
-PRIVATE_KEY=your_wallet_private_key
+PRIVATE_KEY=your_wallet_private_key_without_0x_prefix
 POLYGONSCAN_API_KEY=your_polygonscan_api_key
 AMOY_RPC_URL=https://rpc-amoy.polygon.technology/
 ```
 
 ### Backend `.env`
 
-Copy the example and fill in your values:
+Copy the example file and fill in your values:
 
 ```bash
 cp backend/.env.example backend/.env
@@ -87,12 +138,12 @@ cp backend/.env.example backend/.env
 
 ```env
 PINATA_JWT=your_pinata_jwt_token
-JWT_SECRET=your_random_secret_min_32_chars
+JWT_SECRET=your_random_secret_at_least_32_characters
 PORT=3001
 CORS_ORIGIN=http://localhost:5173
 ```
 
-Generate a JWT secret:
+To generate a secure JWT secret, run:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -100,93 +151,165 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ### MetaMask Network Setup
 
-Add Polygon Amoy to MetaMask:
+Add Polygon Amoy to MetaMask manually with these values:
 
-| Field           | Value                                    |
-|-----------------|------------------------------------------|
-| Network Name    | Polygon Amoy                             |
-| RPC URL         | `https://rpc-amoy.polygon.technology/`   |
-| Chain ID        | `80002`                                  |
-| Currency Symbol | MATIC                                    |
-| Block Explorer  | `https://amoy.polygonscan.com`           |
+| Field           | Value                                  |
+|-----------------|----------------------------------------|
+| Network Name    | Polygon Amoy                           |
+| RPC URL         | `https://rpc-amoy.polygon.technology/` |
+| Chain ID        | `80002`                                |
+| Currency Symbol | MATIC                                  |
+| Block Explorer  | `https://amoy.polygonscan.com`         |
 
-## Usage
-
-1. **Connect wallet** — Click "Connect Wallet" and approve in MetaMask.
-2. **Generate a key** — Go to the Upload page. Generate an AES-256 encryption key (export it and store it safely — you cannot recover files without it).
-3. **Upload a document** — Select a file. It gets encrypted in your browser, uploaded to IPFS, and registered on-chain.
-4. **Retrieve a document** — Go to the Retrieve page. Enter the document hash, provide your key, and the file is downloaded from IPFS and decrypted locally.
-5. **Manage access** — On the Access page, grant or revoke access for other wallet addresses. Set view-only or full access with optional expiration.
-
-Keyboard shortcuts: **D** (Dashboard), **U** (Upload), **R** (Retrieve), **A** (Access).
+Get free test MATIC from the Polygon faucet before uploading any documents.
 
 ## Smart Contract
 
-**Contract**: `DocumentRegistry.sol` (Solidity 0.8.19, MIT licensed)
-**Deployed to**: Polygon Amoy at `0x5A8Bc28165a1B406A1cAe8b21DcC60d3d368B512`
+**File:** `contracts/DocumentRegistry.sol`  
+**Solidity version:** 0.8.19  
+**Deployed on:** Polygon Amoy at `0x5A8Bc28165a1B406A1cAe8b21DcC60d3d368B512`
 
 | Function | Description |
-|----------|-------------|
+|---|---|
 | `storeDocument` | Register a document hash with its IPFS CID |
-| `getDocument` | Retrieve document metadata (requires access) |
-| `grantAccess` | Give another address view-only or full access |
+| `getDocument` | Retrieve the IPFS CID for a document (requires valid access) |
+| `getDocumentMetadata` | Get owner, timestamp, and file name (public) |
+| `verifyDocument` | Check whether a document hash exists on-chain |
+| `grantAccess` | Give another address view-only or full access, with optional expiration |
 | `revokeAccess` | Remove a previously granted access |
-| `getUserDocuments` | List all documents owned by an address |
-| `cleanupExpiredAccess` | Remove expired access grants |
+| `hasAccess` | Check whether an address currently has valid access |
+| `getUserAccess` | Get the access level and expiration details for a specific address |
+| `getDocumentAccessList` | List all addresses that have ever been granted access (owner only) |
+| `cleanupExpiredAccess` | Mark an expired access grant as inactive |
+| `getUserDocuments` | Return all document hashes owned by an address |
+| `getDocumentByIndex` | Return document details by owner address and index |
 
 Access levels: `NONE`, `VIEW_ONLY`, `FULL_ACCESS`, `OWNER`.
 
-## Development
+## Backend API
 
-### Run smart contract tests
+All routes except `/health` require a Bearer JWT obtained from `POST /api/auth/token`.
 
-```bash
-npx hardhat test
-REPORT_GAS=true npx hardhat test
+| Method | Route | Description |
+|---|---|---|
+| GET | `/health` | Server health check |
+| POST | `/api/auth/token` | Issue a short-lived JWT for subsequent requests |
+| GET | `/api/ipfs/test` | Verify the Pinata connection |
+| POST | `/api/ipfs/upload` | Upload an encrypted file to IPFS |
+| GET | `/api/ipfs/retrieve/:cid` | Fetch an encrypted file from IPFS by CID |
+| GET | `/api/ipfs/files` | List pinned files |
+| DELETE | `/api/ipfs/files/:cid` | Unpin a file from IPFS |
+| POST | `/api/access/validate` | Validate a user's access level for a document |
+| POST | `/api/access/token` | Generate a time-limited access token for a document |
+| GET | `/api/ipfs/usage` | Get Pinata storage usage statistics |
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| D | Go to Dashboard |
+| U | Go to Upload |
+| R | Go to Retrieve |
+| A | Go to Access |
+| B | Toggle sidebar |
+
+## Troubleshooting
+
+**MetaMask will not connect.** Make sure the extension is unlocked and set to the Polygon Amoy network (chain ID 80002). Clear the browser cache if the connection drops repeatedly.
+
+**IPFS uploads fail.** Check that your Pinata JWT is correct and that the backend `.env` is saved properly. Run `curl http://localhost:3001/health` to confirm the backend is running.
+
+**Contract deployment fails.** Verify that your wallet has test MATIC and that `PRIVATE_KEY` in the root `.env` does not include a `0x` prefix.
+
+**Decryption fails.** You must use the same AES-256 key that was used during encryption. If the key is lost, the file cannot be recovered. Export and store the key safely after generating it.
+
+## File Organization
+
 ```
-
-### Deploy to local Hardhat network
-
-```bash
-# Terminal 1
-npx hardhat node
-
-# Terminal 2
-npx hardhat run scripts/deploy.js --network localhost
-```
-
-### Verify contract on Polygonscan
-
-```bash
-npx hardhat verify --network polygonAmoy <CONTRACT_ADDRESS>
+SecureChainDocs/
+|
+├── contracts/
+|   └── DocumentRegistry.sol
+|
+├── scripts/
+|   └── deploy.js
+|
+├── test/
+|   └── access-control-test.js
+|
+├── artifacts/
+|   └── contracts/
+|       └── DocumentRegistry.sol/
+|           └── DocumentRegistry.json
+|
+├── backend/
+|   ├── server.js
+|   ├── package.json
+|   └── .env.example
+|
+├── frontend/
+|   ├── index.html
+|   ├── package.json
+|   ├── vite.config.js
+|   ├── tailwind.config.js
+|   ├── postcss.config.js
+|   └── src/
+|       ├── App.jsx
+|       ├── main.jsx
+|       ├── index.css
+|       ├── components/
+|       |   ├── Dashboard/
+|       |   |   └── index.jsx
+|       |   ├── UploadFlow/
+|       |   |   └── index.jsx
+|       |   ├── DocumentRetrieval/
+|       |   |   └── index.jsx
+|       |   ├── AccessManagementPage/
+|       |   |   └── index.jsx
+|       |   ├── DocumentViewer/
+|       |   |   ├── index.jsx
+|       |   |   ├── PDFViewer.jsx
+|       |   |   ├── WordViewer.jsx
+|       |   |   └── ExcelViewer.jsx
+|       |   ├── WalletConnect/
+|       |   |   └── index.jsx
+|       |   ├── IPFSStatus/
+|       |   |   └── index.jsx
+|       |   ├── FileUpload/
+|       |   |   └── index.jsx
+|       |   ├── EncryptionModule/
+|       |   |   └── index.jsx
+|       |   ├── KeyManagement/
+|       |   |   └── index.jsx
+|       |   └── AccessManagement/
+|       |       └── index.jsx
+|       ├── contexts/
+|       |   └── Web3Context.jsx
+|       ├── hooks/
+|       |   ├── useAccessControl.js
+|       |   └── useEncryption.js
+|       ├── utils/
+|       |   ├── crypto.js
+|       |   └── ipfs.js
+|       └── contracts/
+|           ├── DocumentRegistry.abi.json
+|           ├── DocumentRegistry.json
+|           └── contract-address.json
+|
+├── hardhat.config.js
+├── package.json
+└── README.md
 ```
 
 ## Tech Stack
 
-| Layer      | Technology |
-|------------|------------|
-| Frontend   | React 19, Vite 7, Tailwind CSS, Framer Motion, ethers.js v6 |
-| Backend    | Node.js, Express, Multer, Helmet, express-rate-limit |
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, Vite, Tailwind CSS, Framer Motion, ethers.js v6 |
+| Backend | Node.js, Express, Multer, Helmet, express-rate-limit, Pinata SDK |
 | Blockchain | Solidity 0.8.19, Hardhat, OpenZeppelin Contracts v5 |
-| Storage    | IPFS via Pinata, IndexedDB (browser key storage) |
-| Crypto     | Web Crypto API (AES-256-GCM), SHA-256 hashing |
-
-## Troubleshooting
-
-**MetaMask won't connect** — Make sure the extension is unlocked and set to the Polygon Amoy network. Clear the browser cache if the connection drops repeatedly.
-
-**IPFS uploads fail** — Check that your Pinata JWT is valid and the backend `.env` is configured. Run `curl http://localhost:3001/health` to confirm the backend is reachable.
-
-**Contract deployment fails** — Verify your wallet has test MATIC and that `PRIVATE_KEY` in the root `.env` is correct (without a `0x` prefix if Hardhat complains).
-
-**Decryption fails** — You must use the same AES key that was used during encryption. If you lost the key, the file cannot be recovered — this is by design.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Commit your changes
-4. Open a pull request
+| Storage | IPFS via Pinata, IndexedDB (browser key storage) |
+| Cryptography | Web Crypto API (AES-256-GCM, SHA-256, PBKDF2) |
 
 ## License
 
