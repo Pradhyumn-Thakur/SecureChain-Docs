@@ -1,108 +1,106 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Shield, Database, Keyboard, Lock
+  Shield, Database, Keyboard, Lock, ExternalLink, Copy, Check, FileCheck2
 } from 'lucide-react';
 import { useWeb3 } from '../../contexts/Web3Context';
 import ipfsService from '../../utils/ipfs';
+import contractAddress from '../../contracts/contract-address.json';
 
-/* Animated counter that counts up from 0 */
-function AnimatedValue({ value, isText = false }) {
-  const [display, setDisplay] = useState(isText ? '' : '0');
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (isText) {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      const target = String(value);
-      let iteration = 0;
-      const interval = setInterval(() => {
-        setDisplay(
-          target
-            .split('')
-            .map((char, i) => (i < iteration ? char : chars[Math.floor(Math.random() * chars.length)]))
-            .join('')
-        );
-        iteration += 1 / 2;
-        if (iteration >= target.length) {
-          setDisplay(target);
-          clearInterval(interval);
-        }
-      }, 40);
-      return () => clearInterval(interval);
-    }
-  }, [value, isText]);
-
-  if (isText) return <span>{display}</span>;
-  return <span>{value}</span>;
-}
-
-const StatCard = ({ icon: Icon, label, value, accent, delay = 0 }) => (
+const StatCard = ({ icon: Icon, label, value, positive, delay = 0 }) => (
   <motion.div
-    initial={{ opacity: 0, y: 16, scale: 0.95 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ delay, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-    className="card card-tilt p-4 flex items-center justify-between group hover:border-accent-500/20 transition-all duration-500 relative overflow-hidden"
+    initial={{ opacity: 0, y: 8 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay, duration: 0.3, ease: 'easeOut' }}
+    className="card p-4 flex items-center justify-between"
   >
-    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-accent-500/5 to-transparent pointer-events-none" />
-    <div className="relative z-10">
-      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-medium mb-0.5">{label}</p>
-      <p className={`text-xl font-display font-bold ${accent || 'text-white'}`}>
-        <AnimatedValue value={value} isText={true} />
+    <div>
+      <p className="text-[11px] uppercase tracking-[0.08em] text-ink-400 font-medium mb-0.5">{label}</p>
+      <p className={`text-base font-semibold ${positive ? 'text-accent-600' : 'text-ink-800'}`}>
+        {value}
       </p>
     </div>
-    <div className="relative z-10 w-8 h-8 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/[0.06] group-hover:border-accent-500/20 transition-all duration-300">
-      <Icon className={`w-4 h-4 ${accent || 'text-slate-400'} group-hover:scale-110 transition-transform duration-300`} />
+    <div className="w-8 h-8 rounded-md flex items-center justify-center bg-paper-100 border border-ink-100">
+      <Icon className={`w-4 h-4 ${positive ? 'text-accent-600' : 'text-ink-400'}`} />
     </div>
   </motion.div>
 );
 
-/* Animated vault graphic — compact */
-function VaultGraphic() {
+/**
+ * The registry record: instead of decorative graphics, the dashboard
+ * presents verifiable facts — the contract address, the network, and
+ * exactly where encryption happens. Every line can be checked.
+ */
+function RegistryRecord() {
+  const { network, getNetworkName, isConnected } = useWeb3();
+  const [copied, setCopied] = useState(false);
+
+  const address = contractAddress.DocumentRegistry;
+  const chainId = network ? Number(network.chainId) : null;
+  const explorerBase =
+    chainId === 137 ? 'https://polygonscan.com/address/'
+    : chainId === 80002 ? 'https://amoy.polygonscan.com/address/'
+    : null;
+
+  const copyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* clipboard unavailable */ }
+  };
+
   return (
-    <div className="relative w-full h-52 flex items-center justify-center">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.6, rotate: -30 }}
-        animate={{ opacity: 1, scale: 1, rotate: 0 }}
-        transition={{ duration: 1, ease: [0.23, 1, 0.32, 1] }}
-        className="absolute w-36 h-36 rounded-full border border-accent-500/20 animate-[spin_20s_linear_infinite]"
-      >
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-accent-400 shadow-glow-amber" />
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, scale: 0.5 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.2, duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
-        className="absolute w-24 h-24 border border-cyber-500/15 rotate-45 rounded-2xl animate-float"
-      />
-
-      <motion.div
-        initial={{ opacity: 0, scale: 0 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.4, duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-        className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500/20 to-accent-600/10 border border-accent-500/30 flex items-center justify-center shadow-glow-amber animate-float"
-        style={{ animationDelay: '0.5s' }}
-      >
-        <Shield className="w-7 h-7 text-accent-400" />
-      </motion.div>
-
-      {[...Array(4)].map((_, i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 0.6, 0] }}
-          transition={{ delay: 0.6 + i * 0.2, duration: 3, repeat: Infinity, repeatDelay: i * 0.5 }}
-          className="absolute w-1 h-1 rounded-full bg-accent-400"
-          style={{
-            top: `${20 + Math.sin(i * 1.3) * 30}%`,
-            left: `${20 + Math.cos(i * 1.3) * 30}%`,
-          }}
-        />
-      ))}
-
-      <div className="absolute top-2 right-2 w-8 h-8 border-t border-r border-accent-500/10 rounded-tr-lg" />
-      <div className="absolute bottom-2 left-2 w-8 h-8 border-b border-l border-cyber-500/10 rounded-bl-lg" />
+    <div className="card overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-ink-100 bg-paper-100 flex items-center gap-2.5">
+        <FileCheck2 className="w-4 h-4 text-accent-600" />
+        <h3 className="font-display font-semibold text-ink-900 text-sm">Registry record</h3>
+        <span className="ml-auto text-[10px] uppercase tracking-[0.1em] text-ink-400 font-medium">verifiable</span>
+      </div>
+      <div className="px-5 py-1">
+        <div className="evidence-row">
+          <span className="evidence-label">Smart contract</span>
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span className="evidence-value">{address.slice(0, 10)}…{address.slice(-8)}</span>
+            <button onClick={copyAddress} className="text-ink-300 hover:text-ink-700 transition-colors shrink-0" title="Copy address">
+              {copied ? <Check className="w-3.5 h-3.5 text-accent-600" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            {explorerBase && (
+              <a
+                href={explorerBase + address}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyber-500 hover:text-cyber-700 transition-colors shrink-0"
+                title="View on block explorer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </span>
+        </div>
+        <div className="evidence-row">
+          <span className="evidence-label">Network</span>
+          <span className="evidence-value">{isConnected ? getNetworkName() : 'Connect wallet to verify'}</span>
+        </div>
+        <div className="evidence-row">
+          <span className="evidence-label">Encryption</span>
+          <span className="evidence-value">AES-256-GCM, in this browser</span>
+        </div>
+        <div className="evidence-row">
+          <span className="evidence-label">Key custody</span>
+          <span className="evidence-value">Your device only — never sent</span>
+        </div>
+        <div className="evidence-row">
+          <span className="evidence-label">File storage</span>
+          <span className="evidence-value">IPFS (encrypted before upload)</span>
+        </div>
+      </div>
+      <div className="px-5 py-3 border-t border-ink-100 bg-paper-100">
+        <p className="text-[11px] text-ink-400 leading-relaxed">
+          Access permissions are recorded on a public blockchain. Anyone can audit who was
+          granted or revoked access, and when — including you.
+        </p>
+      </div>
     </div>
   );
 }
@@ -111,183 +109,146 @@ export default function Dashboard({ setActiveTab }) {
   const { account, isConnected, isConnecting, getNetworkName, connectWallet } = useWeb3();
   const [ipfsConnected, setIpfsConnected] = useState(false);
 
+  // Backend auth requires a wallet signature and is initiated by Web3Context
+  // after connect — poll the shared service for its status here.
   useEffect(() => {
-    const checkIpfs = async () => {
-      if (ipfsService.isInitialized()) {
-        setIpfsConnected(true);
-        return;
-      }
-      try {
-        const initialized = await ipfsService.initialize();
-        setIpfsConnected(initialized);
-      } catch {
-        setIpfsConnected(false);
-      }
-    };
-    checkIpfs();
-  }, []);
+    const sync = () => setIpfsConnected(!!ipfsService.isInitialized());
+    sync();
+    const interval = setInterval(sync, 2000);
+    return () => clearInterval(interval);
+  }, [isConnected]);
 
   return (
     <div className="flex flex-col h-full gap-6 overflow-hidden">
-      {/* Hero — Asymmetric layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-center">
-        {/* Left — 60% */}
+      {/* Hero */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="lg:col-span-3 space-y-3"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          className="lg:col-span-3 space-y-4"
         >
           <div className="flex items-center gap-3">
-            <div className="h-[1px] w-8 bg-accent-500/40" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-accent-500 font-medium">
-              {isConnected ? 'Vault Active' : 'Blockchain Vault'}
+            <div className="h-px w-8 bg-accent-600" />
+            <span className="text-[11px] uppercase tracking-[0.16em] text-accent-700 font-semibold">
+              Encrypted document registry
             </span>
           </div>
-          <h1 className="font-display text-4xl md:text-5xl font-bold text-white leading-[1.1]">
+          <h1 className="font-display text-4xl md:text-[44px] font-bold text-ink-900 leading-[1.12] tracking-[-0.01em]">
             {isConnected ? (
-              <>Welcome <span className="text-accent-400">back</span></>
+              <>Your documents,<br />on the record.</>
             ) : (
-              <>Secure Document <span className="text-accent-400">Vault</span></>
+              <>Documents, sealed<br />and on the record.</>
             )}
           </h1>
-          <p className="text-slate-400 text-sm md:text-base max-w-lg leading-relaxed">
+          <p className="text-ink-500 text-sm md:text-[15px] max-w-lg leading-relaxed">
             {isConnected
-              ? 'Your encrypted documents are safe on the blockchain. AES-256 encryption with IPFS distributed storage.'
-              : 'Military-grade encryption meets decentralized storage. Connect your wallet to begin.'}
+              ? 'Files are encrypted on your device before anything leaves it. The blockchain keeps a public, tamper-evident record of every document and every permission.'
+              : 'Every file is encrypted on your device before it is stored. A public blockchain records what exists and who may read it — nothing is taken on faith.'}
           </p>
           {!isConnected && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+            <button
+              className="btn-primary px-6 py-2.5"
+              onClick={() => connectWallet()}
+              disabled={isConnecting}
             >
-              <button
-                className="btn-primary px-6 py-2.5 mt-1"
-                onClick={() => connectWallet()}
-                disabled={isConnecting}
-              >
-                {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-              </button>
-            </motion.div>
+              {isConnecting ? 'Connecting…' : 'Connect Wallet'}
+            </button>
           )}
         </motion.div>
 
-        {/* Right — 40% */}
+        {/* Evidence instead of decoration */}
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.15, duration: 0.6 }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.35 }}
           className="lg:col-span-2 hidden lg:block"
         >
-          <VaultGraphic />
+          <RegistryRecord />
         </motion.div>
       </div>
 
-      {/* Status Cards */}
+      {/* Status */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard
           icon={Shield}
           label="Wallet"
-          value={isConnected ? 'Connected' : 'Disconnected'}
-          accent={isConnected ? 'text-emerald-400' : 'text-slate-500'}
-          delay={0.1}
+          value={isConnected ? 'Connected' : 'Not connected'}
+          positive={isConnected}
+          delay={0.05}
         />
         <StatCard
           icon={Database}
           label="Network"
-          value={isConnected ? getNetworkName() : '--'}
-          accent="text-cyber-400"
-          delay={0.18}
+          value={isConnected ? getNetworkName() : '—'}
+          delay={0.1}
         />
         <StatCard
           icon={Database}
-          label="IPFS"
-          value={ipfsConnected ? 'Online' : 'Offline'}
-          accent={ipfsConnected ? 'text-accent-400' : 'text-slate-500'}
-          delay={0.26}
+          label="Storage session"
+          value={ipfsConnected ? 'Authenticated' : 'Awaiting wallet'}
+          positive={ipfsConnected}
+          delay={0.15}
         />
       </div>
 
       {/* How it works + Keyboard shortcuts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="card p-4 relative overflow-hidden scanline-overlay min-w-0"
+          transition={{ delay: 0.2 }}
+          className="card p-5 min-w-0"
         >
-          <h3 className="font-display font-semibold text-white text-sm mb-4 flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-accent-500" />
-            How It Works
+          <h3 className="font-display font-semibold text-ink-900 text-sm mb-4 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-accent-600" />
+            How it works
           </h3>
           <div className="relative">
-            <div className="absolute left-[9px] top-3 bottom-3 w-[2px] bg-gradient-to-b from-accent-500/30 via-cyber-500/20 to-accent-500/30 rounded-full">
-              <motion.div
-                className="w-full bg-accent-400 rounded-full"
-                initial={{ height: '0%' }}
-                animate={{ height: '100%' }}
-                transition={{ delay: 0.5, duration: 1.5, ease: 'easeInOut' }}
-              />
-            </div>
-
-            <div className="space-y-3.5">
+            <div className="absolute left-[11px] top-3 bottom-3 w-px bg-ink-100" />
+            <div className="space-y-4">
               {[
-                { step: '01', title: 'Generate Key', desc: 'Create an AES-256 encryption key', color: 'text-accent-400 border-accent-500/30 bg-accent-500/10' },
-                { step: '02', title: 'Upload & Encrypt', desc: 'Select a file and encrypt it client-side', color: 'text-cyber-400 border-cyber-500/30 bg-cyber-500/10' },
-                { step: '03', title: 'Store on Chain', desc: 'Upload to IPFS and record hash on Polygon', color: 'text-violet-400 border-violet-500/30 bg-violet-500/10' },
-                { step: '04', title: 'Retrieve Anytime', desc: 'Decrypt and download using your key', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
+                { step: '1', title: 'Generate a key', desc: 'An AES-256 key is created in your browser' },
+                { step: '2', title: 'Encrypt locally', desc: 'The file is sealed before any upload happens' },
+                { step: '3', title: 'Record on chain', desc: 'IPFS stores the ciphertext; Polygon records the proof' },
+                { step: '4', title: 'Retrieve & share', desc: 'Access is checked against the blockchain every time' },
               ].map((item, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 + i * 0.1 }}
-                  className="flex items-center gap-3 min-w-0"
-                >
-                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-mono font-bold shrink-0 ${item.color}`}>
+                <div key={i} className="flex items-start gap-3 min-w-0 relative">
+                  <div className="w-[23px] h-[23px] rounded-full bg-white border border-ink-200 flex items-center justify-center text-[10px] font-mono font-medium text-ink-600 shrink-0 relative z-10">
                     {item.step}
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-200 leading-tight truncate">{item.title}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{item.desc}</p>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-[13px] font-medium text-ink-800 leading-tight">{item.title}</p>
+                    <p className="text-xs text-ink-400 mt-0.5">{item.desc}</p>
                   </div>
-                </motion.div>
+                </div>
               ))}
             </div>
           </div>
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
-          className="card p-4"
+          transition={{ delay: 0.25 }}
+          className="card p-5"
         >
-          <div className="flex items-center gap-2 mb-3">
-            <Keyboard className="w-3.5 h-3.5 text-slate-500" />
-            <h3 className="font-display font-semibold text-white text-sm">Keyboard Shortcuts</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <Keyboard className="w-3.5 h-3.5 text-ink-400" />
+            <h3 className="font-display font-semibold text-ink-900 text-sm">Keyboard shortcuts</h3>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {[
               { key: 'D', desc: 'Dashboard' },
               { key: 'U', desc: 'Upload' },
               { key: 'R', desc: 'Retrieve' },
-              { key: 'A', desc: 'Access Management' },
-              { key: 'B', desc: 'Toggle Sidebar' },
+              { key: 'A', desc: 'Access management' },
+              { key: 'B', desc: 'Toggle sidebar' },
             ].map((shortcut, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: 8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + i * 0.05 }}
-                className="flex items-center justify-between"
-              >
-                <span className="text-xs text-slate-400">{shortcut.desc}</span>
-                <kbd className="px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-[11px] text-slate-300 font-mono shadow-inner-glow">
-                  {shortcut.key}
-                </kbd>
-              </motion.div>
+              <div key={i} className="flex items-center justify-between">
+                <span className="text-xs text-ink-500">{shortcut.desc}</span>
+                <kbd className="font-mono">{shortcut.key}</kbd>
+              </div>
             ))}
           </div>
         </motion.div>

@@ -84,12 +84,9 @@ export const useEncryption = () => {
 
       console.log('Converted data buffer length:', dataBuffer.length);
 
-      // The IV is already embedded in the encrypted data by CryptoUtils.encrypt()
-      // No need to reconstruct - just use the data as-is
-      console.log('Using encrypted data as-is (IV already embedded)');
-
-      // Decrypt the data - IV is already embedded at the beginning
-      const decryptedBuffer = await CryptoUtils.decrypt(dataBuffer.buffer, key);
+      // Files are encrypted in 1MB chunks, each with its own embedded IV —
+      // decryptFile walks the chunks; decrypt() alone only handles one.
+      const decryptedBuffer = await CryptoUtils.decryptFile(dataBuffer.buffer, key);
       
       return {
         decryptedData: new Uint8Array(decryptedBuffer),

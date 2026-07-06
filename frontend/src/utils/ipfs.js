@@ -3,43 +3,71 @@ class IPFSService {
     this.apiBaseUrl = 'http://localhost:3001/api';
     this.token = null;
     this.initialized = false;
+    this.signer = null;
+    this.account = null;
+    this.refreshTimer = null;
   }
 
-  // Initialize with backend authentication
-  async initialize() {
+  // Authenticate with the backend by proving wallet ownership:
+  // request a nonce, sign it with MetaMask, exchange for an address-bound JWT.
+  async authenticate(signer, account) {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/auth/token`, {
+      const nonceResponse = await fetch(`${this.apiBaseUrl}/auth/nonce`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: account }),
       });
+      if (!nonceResponse.ok) {
+        throw new Error('Failed to request authentication nonce');
+      }
+      const { message } = await nonceResponse.json();
 
-      if (!response.ok) {
-        throw new Error('Failed to authenticate with backend');
+      const signature = await signer.signMessage(message);
+
+      const verifyResponse = await fetch(`${this.apiBaseUrl}/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: account, signature }),
+      });
+      if (!verifyResponse.ok) {
+        const errorData = await verifyResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Wallet authentication failed');
       }
 
-      const data = await response.json();
+      const data = await verifyResponse.json();
       this.token = data.token;
       this.initialized = true;
-      
-      // Set up token refresh before expiration
-      this.scheduleTokenRefresh();
-      
+      this.signer = signer;
+      this.account = account;
+
+      this.scheduleTokenRefresh(data.expiresIn || 3600);
       return true;
     } catch (error) {
-      console.error('Failed to initialize IPFS service:', error);
+      console.error('Failed to authenticate IPFS service:', error);
       this.initialized = false;
       return false;
     }
   }
 
-  // Schedule token refresh
-  scheduleTokenRefresh() {
-    // Refresh token 1 minute before expiration (14 minutes)
-    setTimeout(() => {
-      this.initialize();
-    }, 14 * 60 * 1000);
+  // Re-run the signature handshake ~5 minutes before the token expires.
+  // Requires a wallet signature, so MetaMask will prompt again.
+  scheduleTokenRefresh(expiresInSeconds) {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    const refreshInMs = Math.max((expiresInSeconds - 300) * 1000, 60 * 1000);
+    this.refreshTimer = setTimeout(() => {
+      if (this.signer && this.account) {
+        this.authenticate(this.signer, this.account);
+      }
+    }, refreshInMs);
+  }
+
+  // Drop credentials (e.g. on wallet disconnect or account switch)
+  reset() {
+    this.token = null;
+    this.initialized = false;
+    this.signer = null;
+    this.account = null;
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
   }
 
   // Get authorization headers
@@ -116,42 +144,64 @@ class IPFSService {
     }
   }
 
-  // Retrieve encrypted file from IPFS
-  async retrieveEncryptedFile(cid) {
+  // Retrieve a document's encrypted content by its on-chain hash.
+  // The backend verifies the caller's on-chain access before serving the file.
+  async retrieveDocumentContent(documentHash) {
     if (!this.isInitialized()) {
       throw new Error('IPFS service not initialized. Please authenticate first.');
     }
 
-    console.log(`IPFS service: Attempting to retrieve CID: ${cid}`);
-    console.log(`Request URL: ${this.apiBaseUrl}/ipfs/retrieve/${cid}`);
-
     try {
-      const response = await fetch(`${this.apiBaseUrl}/ipfs/retrieve/${cid}`, {
+      const response = await fetch(`${this.apiBaseUrl}/documents/${documentHash}/content`, {
         method: 'GET',
         headers: this.getAuthHeaders()
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 403) {
+          throw new Error(errorData.error || 'Access denied: you have no active on-chain grant for this document');
+        }
         throw new Error(errorData.error || 'Retrieval failed');
       }
 
       const result = await response.json();
-      
+
       if (!result.success || !result.data) {
         throw new Error('No data received from IPFS');
       }
 
       return {
         data: result.data,
-        metadata: result.metadata || {},
-        cid: result.cid
+        cid: result.cid,
+        fileName: result.fileName,
+        owner: result.owner,
+        accessLevel: result.accessLevel,
+        expirationTime: result.expirationTime
       };
 
     } catch (error) {
-      console.error('IPFS retrieval failed:', error);
-      throw new Error(`Failed to retrieve from IPFS: ${error.message}`);
+      console.error('Document retrieval failed:', error);
+      throw new Error(`Failed to retrieve document: ${error.message}`);
     }
+  }
+
+  // Ask the backend to validate the caller's on-chain access to a document
+  async validateAccess(documentHash) {
+    if (!this.isInitialized()) {
+      throw new Error('IPFS service not initialized. Please authenticate first.');
+    }
+
+    const response = await fetch(`${this.apiBaseUrl}/access/validate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ documentHash })
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Access validation failed');
+    }
+    return response.json();
   }
 
   // Test connection to backend/Pinata
@@ -278,14 +328,14 @@ const ipfsService = new IPFSService();
 export default ipfsService;
 
 // Helper functions for easy importing
-export const uploadToIPFS = (encryptedData, metadata) => 
+export const uploadToIPFS = (encryptedData, metadata) =>
   ipfsService.uploadEncryptedFile(encryptedData, metadata);
 
-export const retrieveFromIPFS = (cid) => 
-  ipfsService.retrieveEncryptedFile(cid);
+export const retrieveDocument = (documentHash) =>
+  ipfsService.retrieveDocumentContent(documentHash);
 
-export const initializeIPFS = () => 
-  ipfsService.initialize();
+export const authenticateIPFS = (signer, account) =>
+  ipfsService.authenticate(signer, account);
 
-export const testIPFSConnection = () => 
+export const testIPFSConnection = () =>
   ipfsService.testConnection();

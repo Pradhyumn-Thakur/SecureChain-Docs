@@ -1,8 +1,10 @@
-import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import detectEthereumProvider from '@metamask/detect-provider';
 import DocumentRegistryABI from '../contracts/DocumentRegistry.abi.json';
 import contractAddress from '../contracts/contract-address.json';
+import { deriveEncryptionKeypair } from '../utils/keywrap';
+import ipfsService from '../utils/ipfs';
 
 const Web3Context = createContext();
 
@@ -17,10 +19,17 @@ const NETWORKS = {
   },
   amoy: {
     chainId: '0x13882',
-    chainName: 'Polygon Amoy Testnet', 
+    chainName: 'Polygon Amoy Testnet',
     nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
     rpcUrls: ['https://rpc-amoy.polygon.technology/'],
     blockExplorerUrls: ['https://www.oklink.com/amoy']
+  },
+  localhost: {
+    chainId: '0x7a69', // 31337 — local hardhat node for development
+    chainName: 'Hardhat Local',
+    nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['http://127.0.0.1:8545'],
+    blockExplorerUrls: []
   }
 };
 
@@ -36,6 +45,11 @@ export const Web3Provider = ({ children }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState(null);
   const [connectionPromise, setConnectionPromise] = useState(null);
+
+  // Encryption identity: signature-derived keypair used for on-chain key
+  // distribution. Held in memory only — never persisted anywhere.
+  const encryptionIdentityRef = useRef(null);
+  const [encryptionKeyRegistered, setEncryptionKeyRegistered] = useState(false);
 
   // Network management
   const switchNetwork = useCallback(async (networkName = 'amoy') => {
@@ -65,7 +79,10 @@ export const Web3Provider = ({ children }) => {
     
     try {
       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      const isCorrectNetwork = chainId === NETWORKS.amoy.chainId || chainId === NETWORKS.polygon.chainId;
+      const isCorrectNetwork =
+        chainId === NETWORKS.amoy.chainId ||
+        chainId === NETWORKS.polygon.chainId ||
+        chainId === NETWORKS.localhost.chainId;
       
       if (!isCorrectNetwork) {
         await switchNetwork('amoy');
@@ -206,7 +223,71 @@ export const Web3Provider = ({ children }) => {
     setError(null);
     setIsConnecting(false);
     setConnectionPromise(null);
+    encryptionIdentityRef.current = null;
+    setEncryptionKeyRegistered(false);
+    ipfsService.reset();
   }, []);
+
+  // Derive (and cache for the session) the user's encryption keypair.
+  // Prompts one MetaMask signature the first time per session.
+  const ensureEncryptionIdentity = useCallback(async () => {
+    if (!signer || !account) throw new Error('Connect your wallet first');
+
+    const checksummed = ethers.getAddress(account);
+    const cached = encryptionIdentityRef.current;
+    if (cached && cached.address === checksummed) return cached;
+
+    const keypair = await deriveEncryptionKeypair(signer, checksummed);
+    const identity = { ...keypair, address: checksummed };
+    encryptionIdentityRef.current = identity;
+    return identity;
+  }, [signer, account]);
+
+  // Check whether the connected account has registered its encryption
+  // public key on-chain (required to receive shared documents).
+  const refreshEncryptionRegistration = useCallback(async () => {
+    if (!contract || !account) return false;
+    try {
+      const publicKey = await contract.encryptionPublicKeys(account);
+      const registered = !!publicKey && publicKey !== '0x';
+      setEncryptionKeyRegistered(registered);
+      return registered;
+    } catch (err) {
+      console.warn('Could not check encryption key registration:', err);
+      return false;
+    }
+  }, [contract, account]);
+
+  // One-time on-chain registration of the encryption public key
+  const registerEncryptionKey = useCallback(async () => {
+    if (!contract) throw new Error('Connect your wallet first');
+    const identity = await ensureEncryptionIdentity();
+    const tx = await contract.registerEncryptionKey(identity.publicKey);
+    await tx.wait();
+    setEncryptionKeyRegistered(true);
+    return identity;
+  }, [contract, ensureEncryptionIdentity]);
+
+  // On connect / account change: bind the session to the new account —
+  // clear the old encryption identity, authenticate the backend session
+  // (wallet signature), and check on-chain key registration.
+  useEffect(() => {
+    if (!account || !signer) return;
+
+    const cached = encryptionIdentityRef.current;
+    if (cached && cached.address.toLowerCase() !== account.toLowerCase()) {
+      encryptionIdentityRef.current = null;
+    }
+
+    if (!ipfsService.isInitialized() || ipfsService.account?.toLowerCase() !== account.toLowerCase()) {
+      ipfsService.reset();
+      ipfsService.authenticate(signer, account).catch((err) => {
+        console.warn('Backend wallet authentication failed:', err);
+      });
+    }
+
+    refreshEncryptionRegistration();
+  }, [account, signer, refreshEncryptionRegistration]);
 
   // Cleanup connection state on component mount
   useEffect(() => {
@@ -218,10 +299,26 @@ export const Web3Provider = ({ children }) => {
   useEffect(() => {
     if (!window.ethereum) return;
     
-    const handleAccountsChanged = (accounts) => {
+    const handleAccountsChanged = async (accounts) => {
       if (accounts.length === 0) {
         disconnectWallet();
       } else if (accounts[0] !== account) {
+        // Rebuild signer + contract for the new account so transactions
+        // and signatures come from the right wallet
+        try {
+          const browserProvider = new ethers.BrowserProvider(window.ethereum);
+          const newSigner = await browserProvider.getSigner();
+          const contractInstance = new ethers.Contract(
+            contractAddress.DocumentRegistry,
+            DocumentRegistryABI,
+            newSigner
+          );
+          setProvider(browserProvider);
+          setSigner(newSigner);
+          setContract(contractInstance);
+        } catch (err) {
+          console.warn('Failed to rebuild signer after account change:', err);
+        }
         setAccount(accounts[0]);
       }
     };
@@ -251,6 +348,7 @@ export const Web3Provider = ({ children }) => {
     const chainId = '0x' + network.chainId.toString(16);
     if (chainId === NETWORKS.polygon.chainId) return 'Polygon Mainnet';
     if (chainId === NETWORKS.amoy.chainId) return 'Polygon Amoy Testnet';
+    if (chainId === NETWORKS.localhost.chainId) return 'Hardhat Local';
     return 'Unknown Network';
   }, [network]);
 
@@ -270,7 +368,13 @@ export const Web3Provider = ({ children }) => {
     connectWallet,
     disconnectWallet,
     switchNetwork,
-    
+
+    // Encryption identity (on-chain key distribution)
+    encryptionKeyRegistered,
+    ensureEncryptionIdentity,
+    registerEncryptionKey,
+    refreshEncryptionRegistration,
+
     // Utilities
     formatAddress,
     getNetworkName,

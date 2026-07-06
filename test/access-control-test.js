@@ -183,7 +183,10 @@ describe('Multi-Level Access Control System', () => {
   });
 
   describe('Key Storage and Retrieval', () => {
-    it('should store and retrieve keys with metadata', async () => {
+    // IndexedDB is a browser API; these tests only run where it exists
+    const hasIndexedDB = typeof globalThis.indexedDB !== 'undefined';
+
+    it('should store and retrieve keys with metadata', { skip: !hasIndexedDB && 'requires a browser IndexedDB' }, async () => {
       const userKey = await CryptoUtils.generateHierarchicalKey(
         masterKey, ACCESS_LEVELS.FULL_ACCESS, user1, 0
       );
@@ -213,7 +216,7 @@ describe('Multi-Level Access Control System', () => {
         'Retrieved key should work for encryption/decryption');
     });
 
-    it('should reject retrieval of expired keys', async () => {
+    it('should reject retrieval of expired keys', { skip: !hasIndexedDB && 'requires a browser IndexedDB' }, async () => {
       const userKey = await CryptoUtils.generateHierarchicalKey(
         masterKey, ACCESS_LEVELS.FULL_ACCESS, user1, 0
       );
@@ -335,6 +338,47 @@ describe('Security Validation Tests', () => {
     
     assert.notEqual(originalHex, lockedHex, 
       'Time-locked key should be different from original');
+  });
+});
+
+describe('Chunked File Encryption', () => {
+  // encryptFile splits files into 1MB chunks, each with its own IV and GCM
+  // tag. decryptFile must walk the same chunk structure — a single-buffer
+  // decrypt silently works for small files and fails only past 1MB, which is
+  // exactly the regression this guards against.
+  const roundTrip = async (sizeBytes) => {
+    const original = new Uint8Array(sizeBytes);
+    for (let i = 0; i < sizeBytes; i += 4096) original[i] = (i / 4096) % 251;
+
+    const key = await CryptoUtils.generateKey();
+    const file = new File([original], 'test.bin');
+    const encryptedBlob = await CryptoUtils.encryptFile(file, key);
+    const decrypted = new Uint8Array(
+      await CryptoUtils.decryptFile(await encryptedBlob.arrayBuffer(), key)
+    );
+
+    assert.equal(decrypted.length, original.length, 'Size should survive the round trip');
+    assert.deepEqual(decrypted, original, 'Content should survive the round trip');
+  };
+
+  it('should round-trip a small (single-chunk) file', async () => {
+    await roundTrip(64 * 1024);
+  });
+
+  it('should round-trip a multi-chunk file (>1MB)', async () => {
+    await roundTrip(2 * 1024 * 1024 + 12345); // 3 chunks, uneven tail
+  });
+
+  it('should reject tampered ciphertext', async () => {
+    const key = await CryptoUtils.generateKey();
+    const file = new File([new Uint8Array(1024)], 'test.bin');
+    const encrypted = new Uint8Array(await (await CryptoUtils.encryptFile(file, key)).arrayBuffer());
+    encrypted[500] ^= 0xff;
+    await assert.rejects(
+      () => CryptoUtils.decryptFile(encrypted.buffer, key),
+      /invalid key or corrupted data/,
+      'GCM should reject modified ciphertext'
+    );
   });
 });
 

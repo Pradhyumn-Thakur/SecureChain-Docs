@@ -16,6 +16,7 @@ contract DocumentRegistry {
         uint256 expirationTime; // 0 for permanent access
         uint256 grantedAt;
         bool isActive;
+        bytes encryptedKey; // Document key, ECIES-wrapped to the grantee's encryption public key
     }
     
     // Document structure
@@ -33,6 +34,14 @@ contract DocumentRegistry {
     
     // Track documents by owner
     mapping(address => bytes32[]) public userDocuments;
+
+    // Encryption public key registry: 33-byte compressed secp256k1 keys,
+    // derived client-side from a wallet signature. Required to receive shared documents.
+    mapping(address => bytes) public encryptionPublicKeys;
+
+    // Reverse index: documents shared with a user. Document hashes are owner-scoped
+    // (keccak256(owner, fileHash)), so grantees cannot compute them independently.
+    mapping(address => bytes32[]) private sharedWithUser;
     
     // Events
     event DocumentStored(
@@ -60,19 +69,38 @@ contract DocumentRegistry {
         bytes32 indexed documentHash,
         address indexed user
     );
+
+    event EncryptionKeyRegistered(
+        address indexed user,
+        bytes publicKey
+    );
+
+    // Register the caller's encryption public key (33-byte compressed secp256k1).
+    // Other users look this up to wrap document keys for the caller.
+    function registerEncryptionKey(bytes calldata _publicKey) external {
+        require(_publicKey.length == 33, "Invalid public key length");
+        require(_publicKey[0] == 0x02 || _publicKey[0] == 0x03, "Invalid public key prefix");
+
+        encryptionPublicKeys[msg.sender] = _publicKey;
+        emit EncryptionKeyRegistered(msg.sender, _publicKey);
+    }
     
-    // Store a new document or update existing one (for privacy-focused user-scoped hashes)
+    // Store a new document or update existing one (for privacy-focused user-scoped hashes).
+    // _ownerEncryptedKey is the document key wrapped to the owner's own encryption public
+    // key, so the owner can always recover it by re-deriving their keypair from a signature.
     function storeDocument(
         bytes32 _documentHash,
         string memory _ipfsCID,
-        string memory _fileName
+        string memory _fileName,
+        bytes memory _ownerEncryptedKey
     ) public {
         require(bytes(_ipfsCID).length > 0, "IPFS CID required");
         require(bytes(_fileName).length > 0, "File name required");
-        
+        require(_ownerEncryptedKey.length <= 256, "Encrypted key too large");
+
         Document storage doc = documents[_documentHash];
         bool isNewDocument = doc.timestamp == 0;
-        
+
         if (isNewDocument) {
             // New document
             doc.owner = msg.sender;
@@ -80,20 +108,22 @@ contract DocumentRegistry {
                 level: AccessLevel.OWNER,
                 expirationTime: 0, // Permanent for owner
                 grantedAt: block.timestamp,
-                isActive: true
+                isActive: true,
+                encryptedKey: _ownerEncryptedKey
             });
             doc.accessList.push(msg.sender);
             userDocuments[msg.sender].push(_documentHash);
         } else {
             // Existing document - only owner can update
             require(doc.owner == msg.sender, "Only owner can update document");
+            doc.userAccess[msg.sender].encryptedKey = _ownerEncryptedKey;
         }
-        
+
         // Update document data (works for both new and existing)
         doc.ipfsCID = _ipfsCID;
         doc.timestamp = block.timestamp;
         doc.fileName = _fileName;
-        
+
         emit DocumentStored(_documentHash, msg.sender, _ipfsCID, block.timestamp);
     }
     
@@ -130,12 +160,15 @@ contract DocumentRegistry {
         return documents[_documentHash].timestamp != 0;
     }
     
-    // Grant access to another user with specific level and expiration
+    // Grant access to another user with specific level and expiration.
+    // _encryptedKey is the document key wrapped to the grantee's registered encryption
+    // public key, so granting access also delivers the means to decrypt.
     function grantAccess(
-        bytes32 _documentHash, 
-        address _user, 
-        AccessLevel _level, 
-        uint256 _expirationTime
+        bytes32 _documentHash,
+        address _user,
+        AccessLevel _level,
+        uint256 _expirationTime,
+        bytes memory _encryptedKey
     ) public {
         Document storage doc = documents[_documentHash];
         require(doc.owner == msg.sender, "Only owner can grant access");
@@ -144,28 +177,32 @@ contract DocumentRegistry {
         require(_user != msg.sender, "Cannot grant access to self");
         require(_level != AccessLevel.OWNER, "Cannot grant owner level");
         require(_level != AccessLevel.NONE, "Invalid access level");
-        
+        require(_encryptedKey.length > 0, "Encrypted key required");
+        require(_encryptedKey.length <= 256, "Encrypted key too large");
+
         // Check if expiration time is valid (0 for permanent, or future time)
         if (_expirationTime != 0) {
             require(_expirationTime > block.timestamp, "Expiration time must be in future");
         }
-        
+
         AccessGrant storage existingAccess = doc.userAccess[_user];
-        bool hadAccess = existingAccess.isActive;
-        
+        bool isKnownUser = existingAccess.grantedAt != 0;
+
         // Update or create access grant
         doc.userAccess[_user] = AccessGrant({
             level: _level,
             expirationTime: _expirationTime,
             grantedAt: block.timestamp,
-            isActive: true
+            isActive: true,
+            encryptedKey: _encryptedKey
         });
-        
-        // Add to access list if new user
-        if (!hadAccess) {
+
+        // Add to indexes only the first time this user is granted access
+        if (!isKnownUser) {
             doc.accessList.push(_user);
+            sharedWithUser[_user].push(_documentHash);
         }
-        
+
         emit AccessGranted(_documentHash, msg.sender, _user, _level, _expirationTime);
     }
     
@@ -178,9 +215,24 @@ contract DocumentRegistry {
         
         AccessGrant storage access = doc.userAccess[_user];
         require(access.isActive, "Access not granted or already revoked");
-        
+
         access.isActive = false;
+        delete access.encryptedKey; // Hygiene: stop serving the wrapped key after revocation
         emit AccessRevoked(_documentHash, msg.sender, _user);
+    }
+
+    // Get the wrapped document key for a user. Deliberately unrestricted: contract
+    // storage is world-readable via eth_getStorageAt regardless of view-function
+    // modifiers, so restricting this getter would be security theater. The blob is
+    // only decryptable with the grantee's private key, which never touches the chain.
+    function getEncryptedKey(bytes32 _documentHash, address _user) public view returns (bytes memory) {
+        return documents[_documentHash].userAccess[_user].encryptedKey;
+    }
+
+    // List documents that have been shared with a user (reverse index).
+    // Includes revoked/expired grants; callers should filter with hasAccess/getUserAccess.
+    function getSharedDocuments(address _user) external view returns (bytes32[] memory) {
+        return sharedWithUser[_user];
     }
     
     // Check if user has valid access

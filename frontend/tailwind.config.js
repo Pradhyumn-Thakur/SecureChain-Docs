@@ -1,4 +1,69 @@
 /** @type {import('tailwindcss').Config} */
+
+// ─────────────────────────────────────────────────────────────────────
+// "Digital notary" theme — calm, institutional. Light and dark.
+//
+// All colors resolve through CSS variables (defined in index.css), so
+// the dark variant flips the palette without touching components.
+// Legacy token names (surface / accent / cyber / slate) are kept and
+// remapped so older components inherit the redesign:
+//   surface  → paper tones
+//   accent   → ledger green
+//   cyber    → steel ink-blue for evidence/links
+//   slate    → inverted text hierarchy (light-on-dark classes resolve
+//              to the equivalent hierarchy level in both themes)
+// ─────────────────────────────────────────────────────────────────────
+
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
+const paper = {
+  DEFAULT: v('paper'),
+  50: v('paper-50'),
+  100: v('paper-100'),
+  200: v('paper-200'),
+  300: v('paper-300'),
+};
+
+const ink = {
+  900: v('ink-900'),
+  800: v('ink-800'),
+  700: v('ink-700'),
+  600: v('ink-600'),
+  500: v('ink-500'),
+  400: v('ink-400'),
+  300: v('ink-300'),
+  200: v('ink-200'),
+  100: v('ink-100'),
+};
+
+const accent = {
+  DEFAULT: v('accent-500'),
+  50: v('accent-50'),
+  100: v('accent-100'),
+  200: v('accent-200'),
+  300: v('accent-300'),
+  400: v('accent-400'),
+  500: v('accent-500'),
+  600: v('accent-600'),
+  700: v('accent-700'),
+  800: v('accent-800'),
+  900: v('accent-900'),
+};
+
+const cyber = {
+  DEFAULT: v('cyber-500'),
+  50: v('cyber-50'),
+  100: v('cyber-100'),
+  200: v('cyber-200'),
+  300: v('cyber-300'),
+  400: v('cyber-400'),
+  500: v('cyber-500'),
+  600: v('cyber-600'),
+  700: v('cyber-700'),
+  800: v('cyber-800'),
+  900: v('cyber-900'),
+};
+
 export default {
   content: [
     "./index.html",
@@ -8,91 +73,61 @@ export default {
   theme: {
     extend: {
       colors: {
-        vault: {
-          50: '#f8f6f0',
-          100: '#ede8d8',
-          200: '#ddd3b4',
-          300: '#c9b888',
-          400: '#b8a066',
-          500: '#a8904f',
-          600: '#937843',
-          700: '#795e38',
-          800: '#654e33',
-          900: '#56432e',
-          950: '#312417',
-        },
+        paper,
+        ink,
+        accent,
+        cyber,
+        // Legacy chrome tones → paper
         surface: {
-          DEFAULT: '#111318',
-          50: '#f6f7f9',
-          100: '#eceef2',
-          200: '#d5dae2',
-          300: '#b0b9c9',
-          400: '#8593ab',
-          500: '#667691',
-          600: '#515f78',
-          700: '#434d62',
-          800: '#1a1f2e',
-          900: '#14171f',
-          950: '#0B0F19',
+          DEFAULT: v('paper'),
+          50: v('paper-50'),
+          100: v('paper-50'),
+          200: v('paper-100'),
+          300: v('paper-100'),
+          400: v('paper-200'),
+          500: v('paper-200'),
+          600: v('paper-300'),
+          700: v('paper-300'),
+          800: v('paper-100'),
+          900: v('paper-50'),
+          950: v('paper'),
         },
-        accent: {
-          DEFAULT: '#F59E0B',
-          50: '#FFFBEB',
-          100: '#FEF3C7',
-          200: '#FDE68A',
-          300: '#FCD34D',
-          400: '#FBBF24',
-          500: '#F59E0B',
-          600: '#D97706',
-          700: '#B45309',
-          800: '#92400E',
-          900: '#78350F',
-        },
-        cyber: {
-          DEFAULT: '#06B6D4',
-          50: '#ECFEFF',
-          100: '#CFFAFE',
-          200: '#A5F3FC',
-          300: '#67E8F9',
-          400: '#22D3EE',
-          500: '#06B6D4',
-          600: '#0891B2',
-          700: '#0E7490',
-          800: '#155E75',
-          900: '#164E63',
+        // Legacy "light text on dark" hierarchy → same hierarchy, theme-aware
+        slate: {
+          50: v('ink-900'),
+          100: v('ink-900'),
+          200: v('ink-800'),
+          300: v('ink-700'),
+          400: v('ink-500'),
+          500: v('ink-400'),
+          600: v('ink-300'),
+          700: v('ink-200'),
+          800: v('ink-100'),
+          900: v('paper-100'),
+          950: v('paper'),
         },
       },
       fontFamily: {
-        display: ['Sora', 'system-ui', 'sans-serif'],
-        body: ['DM Sans', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-      },
-      backgroundImage: {
-        'noise': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E\")",
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'vault-gradient': 'linear-gradient(135deg, #0B0F19 0%, #14171f 50%, #1a1f2e 100%)',
+        display: ['"Source Serif 4"', 'Georgia', 'serif'],
+        body: ['"Public Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        'glow-amber': '0 0 20px rgba(245, 158, 11, 0.15)',
-        'glow-amber-lg': '0 0 40px rgba(245, 158, 11, 0.25)',
-        'glow-cyan': '0 0 20px rgba(6, 182, 212, 0.15)',
-        'glow-sm': '0 0 10px rgba(245, 158, 11, 0.1)',
-        'inner-glow': 'inset 0 1px 0 rgba(255,255,255,0.05)',
-        'card': '0 4px 24px rgba(0, 0, 0, 0.4)',
-        'card-hover': '0 8px 40px rgba(0, 0, 0, 0.5)',
+        // One quiet elevation scale — no glows
+        'card': '0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 1px rgba(0, 0, 0, 0.03)',
+        'card-hover': '0 2px 6px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.05)',
+        'pop': '0 4px 16px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06)',
+        // Legacy glow keys neutralized so stale references degrade quietly
+        'glow-amber': '0 0 0 rgba(0,0,0,0)',
+        'glow-amber-lg': '0 0 0 rgba(0,0,0,0)',
+        'glow-cyan': '0 0 0 rgba(0,0,0,0)',
+        'glow-sm': '0 0 0 rgba(0,0,0,0)',
+        'inner-glow': 'none',
       },
       animation: {
-        'fade-in': 'fadeIn 0.5s ease-out',
-        'slide-up': 'slideUp 0.5s ease-out',
-        'slide-in-right': 'slideInRight 0.4s ease-out',
-        'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
-        'shimmer': 'shimmer 2s linear infinite',
-        'float': 'float 3s ease-in-out infinite',
-        'border-glow': 'borderGlow 3s ease-in-out infinite',
-        'gradient-shift': 'gradientShift 8s ease infinite',
-        'scanline': 'scanline 4s linear infinite',
-        'dash-rotate': 'dashRotate 12s linear infinite',
-        'pulse-line': 'pulseLine 2s ease-in-out infinite',
+        'fade-in': 'fadeIn 0.4s ease-out',
+        'slide-up': 'slideUp 0.4s ease-out',
+        'slide-in-right': 'slideInRight 0.3s ease-out',
       },
       keyframes: {
         fadeIn: {
@@ -100,45 +135,12 @@ export default {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(16px)' },
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         slideInRight: {
           '0%': { opacity: '0', transform: 'translateX(100%)' },
           '100%': { opacity: '1', transform: 'translateX(0)' },
-        },
-        pulseGlow: {
-          '0%, 100%': { boxShadow: '0 0 10px rgba(245, 158, 11, 0.1)' },
-          '50%': { boxShadow: '0 0 25px rgba(245, 158, 11, 0.25)' },
-        },
-        shimmer: {
-          '0%': { backgroundPosition: '-200% 0' },
-          '100%': { backgroundPosition: '200% 0' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-8px)' },
-        },
-        borderGlow: {
-          '0%, 100%': { borderColor: 'rgba(245, 158, 11, 0.2)', boxShadow: '0 0 15px rgba(245, 158, 11, 0.05)' },
-          '50%': { borderColor: 'rgba(245, 158, 11, 0.5)', boxShadow: '0 0 30px rgba(245, 158, 11, 0.15)' },
-        },
-        gradientShift: {
-          '0%': { backgroundPosition: '0% 50%' },
-          '50%': { backgroundPosition: '100% 50%' },
-          '100%': { backgroundPosition: '0% 50%' },
-        },
-        scanline: {
-          '0%': { transform: 'translateY(-100%)' },
-          '100%': { transform: 'translateY(100%)' },
-        },
-        dashRotate: {
-          '0%': { strokeDashoffset: '0' },
-          '100%': { strokeDashoffset: '-200' },
-        },
-        pulseLine: {
-          '0%, 100%': { opacity: '0.3' },
-          '50%': { opacity: '1' },
         },
       },
     },

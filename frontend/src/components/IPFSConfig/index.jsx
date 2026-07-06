@@ -1,29 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Check, AlertCircle, ExternalLink, Shield, Loader2, RefreshCw, X } from 'lucide-react';
-import ipfsService, { testIPFSConnection } from '../../utils/ipfs';
+import ipfsService from '../../utils/ipfs';
+import { useWeb3 } from '../../contexts/Web3Context';
 
 const IPFSConfig = ({ onConfigured }) => {
+  const { signer, account, isConnected: walletConnected } = useWeb3();
   const [isConfigured, setIsConfigured] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState('');
   const [usageStats, setUsageStats] = useState(null);
 
-  useEffect(() => { initializeService(); }, [onConfigured]);
+  useEffect(() => { initializeService(); }, [onConfigured, walletConnected]);
 
   const initializeService = async () => {
     try {
       setIsConnecting(true);
       setError('');
-      const initialized = await ipfsService.initialize();
+      // Session is normally established by Web3Context after wallet connect;
+      // re-run the signature handshake here only if it's missing.
+      let initialized = ipfsService.isInitialized();
+      if (!initialized && signer && account) {
+        initialized = await ipfsService.authenticate(signer, account);
+      }
       if (initialized) {
         setIsConfigured(true);
         await loadUsageStats();
         onConfigured?.(true);
+      } else if (!walletConnected) {
+        throw new Error('Connect your wallet to authenticate with the secure backend');
       } else {
         throw new Error('Failed to authenticate with secure backend');
       }
-    } catch {
-      setError('Backend service unavailable. Please ensure the server is running.');
+    } catch (err) {
+      setError(err.message?.includes('wallet')
+        ? err.message
+        : 'Backend service unavailable. Please ensure the server is running.');
       setIsConfigured(false);
       onConfigured?.(false);
     } finally {

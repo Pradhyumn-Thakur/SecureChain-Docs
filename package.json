@@ -8,7 +8,13 @@
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test:contracts && npm run test:crypto && npm run test:backend",
+    "test:contracts": "hardhat test test/DocumentRegistry.test.js",
+    "test:crypto": "node --test test/keywrap.test.js test/access-control-test.js",
+    "test:backend": "npm --prefix backend test",
+    "compile": "hardhat compile",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:amoy": "hardhat run scripts/deploy.js --network polygonAmoy"
   },
   "keywords": [],
   "author": "",

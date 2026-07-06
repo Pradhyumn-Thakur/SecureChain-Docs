@@ -226,6 +226,38 @@ class CryptoUtils {
   }
 
   /**
+   * Decrypt a file produced by encryptFile. The blob is a sequence of
+   * independently encrypted chunks (1MB of plaintext each), and every chunk
+   * carries its own IV and GCM tag — so it must be decrypted chunk by chunk,
+   * not as a single IV+ciphertext buffer.
+   * @param {ArrayBuffer} combinedData - Concatenated encrypted chunks
+   * @param {CryptoKey} key - The decryption key
+   * @param {Function} onProgress - Progress callback (0-100)
+   * @returns {Promise<ArrayBuffer>} The original file bytes
+   */
+  static async decryptFile(combinedData, key, onProgress = () => {}) {
+    const ENCRYPTED_CHUNK_SIZE = 12 + (1024 * 1024) + 16; // IV + plaintext chunk + GCM tag
+    const data = new Uint8Array(combinedData);
+    const parts = [];
+
+    for (let offset = 0; offset < data.length; offset += ENCRYPTED_CHUNK_SIZE) {
+      const chunk = data.slice(offset, Math.min(offset + ENCRYPTED_CHUNK_SIZE, data.length));
+      const decryptedChunk = await this.decrypt(chunk.buffer, key);
+      parts.push(new Uint8Array(decryptedChunk));
+      onProgress(Math.min(((offset + ENCRYPTED_CHUNK_SIZE) / data.length) * 100, 100));
+    }
+
+    const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+    const combined = new Uint8Array(totalLength);
+    let writeOffset = 0;
+    for (const part of parts) {
+      combined.set(part, writeOffset);
+      writeOffset += part.length;
+    }
+    return combined.buffer;
+  }
+
+  /**
    * Encrypt a file with progress callback
    * @param {File} file - The file to encrypt
    * @param {CryptoKey} key - The encryption key

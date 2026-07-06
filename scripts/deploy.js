@@ -23,8 +23,15 @@ async function main() {
     contractsDir + "/contract-address.json",
     JSON.stringify({ DocumentRegistry: address }, null, 2)
   );
-  
-  console.log("Contract address saved to frontend");
+
+  // Export the compiled ABI so the frontend copy can never go stale
+  const artifact = require("../artifacts/contracts/DocumentRegistry.sol/DocumentRegistry.json");
+  fs.writeFileSync(
+    contractsDir + "/DocumentRegistry.abi.json",
+    JSON.stringify(artifact.abi, null, 2)
+  );
+
+  console.log("Contract address and ABI saved to frontend");
 }
 
 main()

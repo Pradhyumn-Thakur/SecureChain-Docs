@@ -4,9 +4,11 @@ import { ethers } from 'ethers';
 import { useWeb3 } from '../../contexts/Web3Context';
 import { AppContext } from '../../App';
 import ipfsService from '../../utils/ipfs';
+import CryptoUtils from '../../utils/crypto';
+import { wrapKey } from '../../utils/keywrap';
 
-const BlockchainStorage = ({ encryptedData }) => {
-  const { contract, account, network } = useWeb3();
+const BlockchainStorage = ({ encryptedData, encryptionKey }) => {
+  const { contract, account, network, ensureEncryptionIdentity } = useWeb3();
   const { addNotification } = useContext(AppContext);
   const [isStoring, setIsStoring] = useState(false);
   const [isUploadingToIPFS, setIsUploadingToIPFS] = useState(false);
@@ -38,6 +40,7 @@ const BlockchainStorage = ({ encryptedData }) => {
   const storeOnBlockchain = async () => {
     if (!contract || !account) { addNotification('Connect your wallet first', 'error'); return; }
     if (!encryptedData) { addNotification('No encrypted data to store', 'error'); return; }
+    if (!encryptionKey) { addNotification('Encryption key unavailable — generate or load it first', 'error'); return; }
     if (!ipfsService.isInitialized()) { addNotification('Configure IPFS storage first', 'error'); return; }
 
     setIsStoring(true);
@@ -65,6 +68,13 @@ const BlockchainStorage = ({ encryptedData }) => {
         } catch { addNotification('Proceeding with upload...', 'info', 2000); }
       }
 
+      // Wrap the document key to the owner's own encryption identity so it can
+      // always be recovered from the chain with a wallet signature later.
+      setProgress('Preparing key recovery (sign the message in MetaMask)...');
+      const identity = await ensureEncryptionIdentity();
+      const rawKeyHex = await CryptoUtils.exportKey(encryptionKey);
+      const selfWrappedKey = await wrapKey(identity.publicKey, ethers.getBytes('0x' + rawKeyHex));
+
       setIsUploadingToIPFS(true);
       setProgress('Uploading to IPFS...');
       const ipfsResult = await ipfsService.uploadEncryptedFile(encryptedData, { walletAddress: account, network: network?.name || 'unknown' });
@@ -72,7 +82,7 @@ const BlockchainStorage = ({ encryptedData }) => {
       setIsUploadingToIPFS(false);
 
       setProgress('Storing on blockchain...');
-      const tx = await contract.storeDocument(userScopedHash, ipfsResult.cid, encryptedData.fileName, {
+      const tx = await contract.storeDocument(userScopedHash, ipfsResult.cid, encryptedData.fileName, selfWrappedKey, {
         gasLimit: 500000,
         gasPrice: ethers.parseUnits('30', 'gwei')
       });

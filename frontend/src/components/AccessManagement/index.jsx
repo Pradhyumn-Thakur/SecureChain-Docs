@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ACCESS_LEVELS, TIME_UNITS } from '../../utils/crypto';
+import { ethers } from 'ethers';
+import CryptoUtils, { ACCESS_LEVELS, TIME_UNITS } from '../../utils/crypto';
+import { wrapKey, unwrapKey } from '../../utils/keywrap';
 import { useWeb3 } from '../../contexts/Web3Context';
 import { UserPlus, X, Clock, Shield, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -61,8 +63,40 @@ const AccessManagement = ({ documentHash, isOwner, onAccessGranted, onAccessRevo
         expirationTime = Math.floor((Date.now() + (duration * multiplier)) / 1000);
       }
 
+      // The recipient needs the document key to actually read the file.
+      // Look up their registered encryption public key on-chain...
+      const recipientPublicKey = await web3Context.contract.encryptionPublicKeys(grantForm.userAddress);
+      if (!recipientPublicKey || recipientPublicKey === '0x') {
+        throw new Error('This address has not registered an encryption key yet. Ask them to connect their wallet and register first.');
+      }
+
+      // ...obtain the raw document key (passed-in key, or recover the
+      // self-wrapped copy from the chain with a wallet signature)...
+      let rawDocumentKey;
+      if (encryptionKey) {
+        const hex = await CryptoUtils.exportKey(encryptionKey);
+        rawDocumentKey = ethers.getBytes('0x' + hex);
+      } else {
+        const selfWrapped = await web3Context.contract.getEncryptedKey(documentHash, web3Context.account);
+        if (!selfWrapped || selfWrapped === '0x') {
+          throw new Error('Document key unavailable. Load the encryption key for this document, then try again.');
+        }
+        const identity = await web3Context.ensureEncryptionIdentity();
+        rawDocumentKey = await unwrapKey(identity.privateKey, selfWrapped);
+      }
+
+      // ...and wrap it to the recipient so the grant also delivers the key.
+      const wrappedForRecipient = await wrapKey(recipientPublicKey, rawDocumentKey);
+
       const accessLevelValue = grantForm.accessLevel === ACCESS_LEVELS.VIEW_ONLY ? 1 : 2;
-      await web3Context.contract.grantAccess(documentHash, grantForm.userAddress, accessLevelValue, expirationTime);
+      const tx = await web3Context.contract.grantAccess(
+        documentHash,
+        grantForm.userAddress,
+        accessLevelValue,
+        expirationTime,
+        wrappedForRecipient
+      );
+      await tx.wait();
 
       setGrantForm({ userAddress: '', accessLevel: ACCESS_LEVELS.VIEW_ONLY, durationType: 'permanent', durationValue: '', durationUnit: 'days' });
       setShowGrantForm(false);
@@ -84,7 +118,8 @@ const AccessManagement = ({ documentHash, isOwner, onAccessGranted, onAccessRevo
     setLoading(true);
     setError('');
     try {
-      await web3Context.contract.revokeAccess(documentHash, userAddress);
+      const tx = await web3Context.contract.revokeAccess(documentHash, userAddress);
+      await tx.wait();
       await loadAccessList();
       setSuccess('Access revoked');
       setTimeout(() => setSuccess(''), 5000);
